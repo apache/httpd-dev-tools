@@ -1,0 +1,44 @@
+#!/bin/bash
+# svn.merge: tool for merging into a branch a number of specified
+# revisions from the trunk.
+# 
+# Usage: (from a branch working copy)
+#    $ svn.merge 200 203 210 220
+#    $ vi clog  ### adjust if necessary
+#    $ svn ci -F clog
+# merges the specified revisions from into the wc and creates a
+# suitable changelog.
+
+trunk=`svn info . | sed -n '/^URL/{s,branches/.*,trunk,;s/^URL: //;p}'`
+
+if [ $# -eq 1 ]; then
+  if echo "$1" | grep , >/dev/null; then
+    NEWARG=$(echo $1|sed -e 's/,/ /g')
+    set -- $NEWARG
+  fi
+fi
+
+revs=
+for rev in $*; do
+  test -n "$revs" && revs="${revs}, "
+  revs="${revs}r${rev}"
+  prev=$(($rev - 1))
+  echo + svn merge -r${prev}:${rev} ${trunk}
+  svn merge -r${prev}:${rev} ${trunk} || exit 1
+done
+test -f clog && mv -f clog clog~
+echo Merge ${revs} from trunk: > clog
+author=
+for rev in $*; do
+  echo + svn log -r${rev} ${trunk}
+  svn log -r${rev} ${trunk} | sed '1,2d;$d' >> clog
+  echo + svn propget svn:author ...
+  rauth=`svn propget svn:author --revprop -r ${rev} ${trunk}`
+  test -z "${author}" && author="${rauth}"
+  test "${rauth}" != "${author}" && author="${author}, ${rauth}"
+done
+if test x$author != x$LOGNAME; then
+  echo Submitted by: $author >> clog
+fi
+echo Reviewed by: $LOGNAME >> clog
+cat clog
