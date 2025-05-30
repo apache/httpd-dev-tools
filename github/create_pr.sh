@@ -30,7 +30,6 @@ if type -P gh > /dev/null ; then
     fi
 fi
 
-exit 2
 while getopts "hb:t:r" OPTION ; do
     case "$OPTION" in
         h) usage
