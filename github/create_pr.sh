@@ -15,19 +15,31 @@
 
 usage()
 {
-    echo "usage: $(basename $0) [-b branch name] [-t target branch name] <revision number> [revision numbers] ..."
+    echo "usage: $(basename $0) [-r] [-b branch name] [-t target branch name] <revision number> [revision numbers] ..."
+    echo "\t\t -r: resume after handling merge conflicts from a previous run"
     exit
 }
 
 TARGET_BRANCH_NAME="2.4.x"
+RESUME=0
 
-while getopts "hb:t:" OPTION ; do
+if type -P gh > /dev/null ; then
+    if ! gh auth status 2>&1|grep "Logged in to github.com" >/dev/null; then
+        echo "You need to `gh auth login` before continuing"
+        exit 1
+    fi
+fi
+
+exit 2
+while getopts "hb:t:r" OPTION ; do
     case "$OPTION" in
         h) usage
            ;;
         b) BRANCH_NAME="$OPTARG"
            ;;
         t) TARGET_BRANCH_NAME="$OPTARG"
+           ;;
+        r) RESUME=1
            ;;
     esac
 done
@@ -74,12 +86,14 @@ for i in "$@" ; do
     fi
 done
 
-for i in $COMMITS ; do
-    git cherry-pick -x $i
-    if [ "$?" -ne 0 ] ; then
-        exit
-    fi
-done
+if [ $RESUME -eq 0 ]; then
+  for i in $COMMITS ; do
+      git cherry-pick -x $i
+      if [ "$?" -ne 0 ] ; then
+          exit
+      fi
+  done
+fi
 
 git push -u origin $BRANCH_NAME
 MESSAGE=`echo "$@" | sed -e 's/ /, r/g'`
