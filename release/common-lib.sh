@@ -213,7 +213,7 @@ check_autotools() {
   LIBTOOL_WANTED_PATCH=10
   LIBTOOL_WANTED_VERSION=1.5.10
 
-  libtool=`which glibtool 2>/dev/null`
+  libtool=`which glibtool 2>/dev/null`||true
   if test ! -x "$libtool"; then
     libtool=`which libtool`
   fi
