@@ -1,79 +1,125 @@
-httpd release scripts
+# httpd release scripts/process
 
-STATUS
- - needs 'jq' installed
+## Setup and prerequisites
 
-Usage overview:
- - have a checkout of https://svn.apache.org/repos/asf/httpd/dev-tools in $DEV_TOOLS
- - be in a local checkout of project the branch you want to release:
-   (replace 'rc1' with 'rc2', 'rc3' on need)
- - If this is rc1, `rm -rf dist`
-   > $DEV_TOOLS/release/r0-make-candidate.sh rc1
-     Review the output, including picking up any ready CVEs (based on tools/readiness.sh output)
-   > $DEV_TOOLS/release/r1-make-tars.sh
-   > $DEV_TOOLS/release/r2-prep-vote.sh
-     # tars are available at https://dist.apache.org/repos/dist/dev/ now
-     # send out a mail for voting on it, a message is prepared in ./dist
+1. make sure `jq` is in your path
+2. have a checkout of https://svn.apache.org/repos/asf/httpd/dev-tools and set environment variable $DEV_TOOLS in the environment
 
- - On vote failure, `$DEV_TOOLS/release/reset-candidate.sh` and start over with a new RC.
- - On vote success:
-   > $DEV_TOOLS/release/r3-push-release-tars.sh
-     # tars are moved to https://dist.apache.org/repos/dist/release/
-     # the SVN tags/$FULL_VERSION-candidate is moved to tags/$VERSION
-     # wait for files to be available.
-     # - https://downloads.apache.org/httpd/ and mirrors should be updated within 15 minutes.
-       - https://dlcdn.apache.org/httpd/ should have direct access to the same files as soon
-         as they are listable on downloads.a.o, but the directory listings on dlcdn.a.o are cached and may be delayed
-         for up to two hours.
-   > $DEV_TOOLS/release/r4-stage-release.sh
-     # ALL CHANGES HERE ARE LOCAL ONLY
-     # folds in CVE related information for CHANGES files
-     # moves CVEs to pmc/resolved
-     # update ./CHANGES ./STATUS ./include/ap_release.h
-     # checks out and modifies project website
-# ----------------
-# update to here, everything can be reverted via '$DEV_TOOLS/release/reset-candidate.sh'
-#-----------------
-   > $DEV_TOOLS/release/r5-commit-staged-release.sh
-     # commit all locally staged changes to repositories and website
-   > Manual: Check that the website works. Check the download page, the vulnerabilities page.
-   > $DEV_TOOLS/release/r6-announce.sh
-     # announce it to the world by mail (output will tell you how to do it)
-   # Process the CVEs that have been part of the release. For each CVE:
-     - Fill in a 'reference' tag 'vendor-advisory' with the URL to your public post about
+## Procedure
+
+### Produce a candidate
+1. `cd` to a local checkout of project the branch you want to release. 
+
+   It's best to have a dedicated checkout used for releases, as the tools expect it to be clean. For example `cd ~/asf/httpd-2.4.x-release`
+
+2. If this is an initial release candidate, `rm -rf dist` to throw away the 
+   state from the previous release
+
+3. Prepare the release: `$DEV_TOOLS/release/r0-make-candidate.sh rc1`
+
+   Review the output, including picking up any ready CVEs (based on tools/readiness.sh output)
+
+4. Prepare the tarballs: `$DEV_TOOLS/release/r1-make-tars.sh`
+
+   Pay attention as you will likely be prompted for gpg login.
+
+5. Push tarballs for voting: `$DEV_TOOLS/release/r2-prep-vote.sh`
+    
+   Tarballs are available at https://dist.apache.org/repos/dist/dev/ now
+   and a draft email for voting is output and left in `dist/`.
+  
+6. Send the email, do your own testing, and monitor the thread
+
+### Handle vote results
+
+#### On vote failure
+`$DEV_TOOLS/release/reset-candidate.sh` and start over with a new candidate.
+
+#### On vote success
+
+
+1. `$DEV_TOOLS/release/r3-push-release-tars.sh`
+
+    - tars are moved to https://dist.apache.org/repos/dist/release/httpd/
+    - the SVN tags/$FULL_VERSION-candidate is moved to tags/$VERSION
+
+2. Wait for files to be available
+   - Validate <https://downloads.apache.org/httpd/> (within 15 minutes)
+   - Validate <https://dlcdn.apache.org/httpd/>
+
+     The directory listing can be cached for up to two hours, but validate that you
+     can manually access the current release by manipulating the filenames you see from
+     the previous release then move on
+3. Stage the other release artifacts:  `$DEV_TOOLS/release/r4-stage-release.sh`
+   
+   ALL CHANGES HERE ARE LOCAL ONLY
+
+   - folds in CVE related information for CHANGES files
+   - moves CVEs to pmc/resolved
+   -  update ./CHANGES ./STATUS ./include/ap_release.h
+   - checks out and modifies project website
+   
+   To verify, just `svn diff` with a focus on e.g. CHANGES for CVE handling.
+
+4. Up until this point, everything can be reverted with  `$DEV_TOOLS/release/reset-candidate.sh`
+
+5. Commit additionals staged release artifacts: `$DEV_TOOLS/release/r5-commit-staged-release.sh`
+
+   This commits all locally staged changes to repositories and website.
+
+6. Validate the website updates.
+
+   Shortly after the commit, buildbot transforms content from the main branch on 	git@github.com:/apache/httpd-site onto the asf-site branch. 
+
+   1. Wait for the buildbot email (few minutes)
+   2. Verify the asf-site branch:
+      - <https://github.com/apache/httpd-site/blob/asf-site/output/security/vulnerabilities_24.html>
+      - <https://github.com/apache/httpd-site/blob/asf-site/output/index.html>
+   3. Verify <httpd.apache.org>:  make sure the index, download, and security report pages are
+   updated.  
+
+7. Send the announcements: `$DEV_TOOLS/release/r6-announce.sh`
+  
+   The script will guide you how to send the emails.
+
+8. Process the CVES that were included.
+
+    - Fill in a 'reference' tag 'vendor-advisory' with the URL to your public post about
        this issue.  A link to https://httpd.apache.org/security/vulnerabilities_24.html is sufficient.
-     - set CVE to READY on the cveprocess site
-     - amend the commit messages to mention the CVE number (you can append the entire CHANGES entry)
+    - set CVE to READY on the cveprocess site
+    - amend the commit messages to mention the CVE number (you can append the entire CHANGES entry)
        `svn propedit --revprop -r ... svn:log`
-     - add a timeline entry to the CVE
+    - add a timeline entry to the CVE
        > fixed by r... in 2.4.x
-     # Edit the CVE info into the revisions that fixed them in the backport, e.g. `svn propedit --revprop -r... svn:log`
-     - Use the 'OSS/ASF Emails' tab for the emails you should send to oss-security
-       and to Apache lists.
-     - ASF Security will be notified and will submit to the CVE
-       project and then set state to 'PUBLIC'.
-   # Clean up prior release artifacts
+    -  Edit the CVE info into the revisions that fixed them in the backport, e.g. `svn propedit --revprop -r... svn:log`
+    - Use the 'OSS/ASF Emails' tab for the emails you should send to oss-security
+      and to Apache lists.
+    - ASF Security will be notified and will submit to the CVE
+      project and then set state to 'PUBLIC'.
+9. Clean up prior release artifacts
      - https://dist.apache.org/repos/dist/release/httpd (incl CHANGES_2.4.xx)
-   # Review the CHANGES and https://httpd.apache.org/security/vulnerabilities_24.html for style
-     and tweak as needed. git@github.com:/apache/httpd-site has one-time copies of CVE.json, edit and
-     commit and the site will be rebuilt immediately.
+10. Review the CHANGES and https://httpd.apache.org/security/vulnerabilities_24.html 
 
-     Even if you are not picky about the style of https://httpd.apache.org/security/vulnerabilities_24.html it is
-     critical to verify the expected CVEs are listed. This is built by CI during changes to git@github.com:/apache/httpd-site
-     and can be broken if the exported CVE json is missing fields.
-
+     ... For style and tweak as needed. git@github.com:/apache/httpd-site has
+     one-time copies of CVE.json, edit and commit and the site will be rebuilt
+     immediately.
+     
+     Even if you are not picky about the style of
+     https://httpd.apache.org/security/vulnerabilities_24.html it is
+     critical to verify the expected CVEs are listed. This is built by CI during
+     changes to git@github.com:/apache/httpd-site and can be broken if the
+     exported CVE json is missing fields.
+     
      If CHANGES is really bad, consider replacing the various CHANGES files on dist/httpd.
 
-   # If you are a moderator for announce@httpd.a.o or announce@a.o moderate your own announcement
-     at https://webmod.apache.org/?action=frontpage
-   # Add the release to bugzilla: https://bz.apache.org/bugzilla/editversions.cgi?action=add&product=Apache%20httpd-2
-
- On vote failure or when aborting for other reasons:
-   > $DEV_TOOLS/release/reset-candidate.sh version
-     # removes all additions to SVN repositories and clears local dist
-     # UNLESS you have run step5 already!
+11. Moderate announcements
+    If you are a moderator for announce@httpd.a.o or announce@a.o moderate your own announcement at https://webmod.apache.org/?action=frontpage
+12. Add the release to bugzilla: 
+    
+    <https://bz.apache.org/bugzilla/editversions.cgi?action=add&product=Apache%20httpd-2>
 
 
+## Misc notes
 The local checkout:
  - same as you otherwise use, e.g. of ^/httpd/httpd/branches/2.4.x
  - make sure that it builds and passes the tests for you
