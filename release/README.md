@@ -33,6 +33,7 @@
 ### Handle vote results
 
 #### On vote failure
+
 `$DEV_TOOLS/release/reset-candidate.sh` and start over with a new candidate.
 
 #### On vote success
@@ -114,6 +115,7 @@
 
 11. Moderate announcements
     If you are a moderator for announce@httpd.a.o or announce@a.o moderate your own announcement at https://webmod.apache.org/?action=frontpage
+    
 12. Add the release to bugzilla: 
     
     <https://bz.apache.org/bugzilla/editversions.cgi?action=add&product=Apache%20httpd-2>
