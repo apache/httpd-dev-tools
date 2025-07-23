@@ -15,15 +15,21 @@
 2. If this is an initial release candidate, `rm -rf dist` to throw away the 
    state from the previous release
 
-3. Prepare the release: `$DEV_TOOLS/release/r0-make-candidate.sh rc1`
+3. Prepare the release: 
+
+   `$DEV_TOOLS/release/r0-make-candidate.sh rc1`
 
    Review the output, including picking up any ready CVEs (based on tools/readiness.sh output)
 
-4. Prepare the tarballs: `$DEV_TOOLS/release/r1-make-tars.sh`
+4. Prepare the tarballs: 
+
+   `$DEV_TOOLS/release/r1-make-tars.sh`
 
    Pay attention as you will likely be prompted for gpg login.
 
-5. Push tarballs for voting: `$DEV_TOOLS/release/r2-prep-vote.sh`
+5. Push tarballs for voting: 
+
+   `$DEV_TOOLS/release/r2-prep-vote.sh`
     
    Tarballs are available at https://dist.apache.org/repos/dist/dev/ now
    and a draft email for voting is output and left in `dist/`.
@@ -39,7 +45,9 @@
 #### On vote success
 
 
-1. `$DEV_TOOLS/release/r3-push-release-tars.sh`
+1. Push the release tarballs
+
+   `$DEV_TOOLS/release/r3-push-release-tars.sh`
 
     - tars are moved to https://dist.apache.org/repos/dist/release/httpd/
     - the SVN tags/$FULL_VERSION-candidate is moved to tags/$VERSION
@@ -51,7 +59,10 @@
      The directory listing can be cached for up to two hours, but validate that you
      can manually access the current release by manipulating the filenames you see from
      the previous release then move on
-3. Stage the other release artifacts:  `$DEV_TOOLS/release/r4-stage-release.sh`
+
+3. Stage the other release artifacts:  
+
+   `$DEV_TOOLS/release/r4-stage-release.sh`
    
    ALL CHANGES HERE ARE LOCAL ONLY
 
@@ -62,9 +73,11 @@
    
    To verify, just `svn diff` with a focus on e.g. CHANGES for CVE handling.
 
-4. Up until this point, everything can be reverted with  `$DEV_TOOLS/release/reset-candidate.sh`
+4. Up until this point, everything can be reverted with  $DEV_TOOLS/release/reset-candidate.sh
 
-5. Commit additionals staged release artifacts: `$DEV_TOOLS/release/r5-commit-staged-release.sh`
+5. Commit additionals staged release artifacts: 
+
+   `$DEV_TOOLS/release/r5-commit-staged-release.sh`
 
    This commits all locally staged changes to repositories and website.
 
@@ -79,7 +92,9 @@
    3. Verify <httpd.apache.org>:  make sure the index, download, and security report pages are
    updated.  
 
-7. Send the announcements: `$DEV_TOOLS/release/r6-announce.sh`
+7. Send the announcements: 
+
+   `$DEV_TOOLS/release/r6-announce.sh`
   
    The script will guide you how to send the emails.
 
