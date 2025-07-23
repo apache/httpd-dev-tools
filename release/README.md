@@ -99,19 +99,20 @@
    The script will guide you how to send the emails.
 
 8. Process the CVES that were included.
-
-    - Fill in a 'reference' tag 'vendor-advisory' with the URL to your public post about
-       this issue.  A link to https://httpd.apache.org/security/vulnerabilities_24.html is sufficient.
-    - set CVE to READY on the cveprocess site
-    - amend the commit messages to mention the CVE number (you can append the entire CHANGES entry)
-       `svn propedit --revprop -r ... svn:log`
-    - add a timeline entry to the CVE
+   - In <https://cveprocess.apache.org>
+     - Fill in a 'reference' tag 'vendor-advisory' with the URL to your public post about
+        this issue.  A link to https://httpd.apache.org/security/vulnerabilities_24.html is sufficient.
+     - add a timeline entry to the CVE
        > fixed by r... in 2.4.x
-    -  Edit the CVE info into the revisions that fixed them in the backport, e.g. `svn propedit --revprop -r... svn:log`
-    - Use the 'OSS/ASF Emails' tab for the emails you should send to oss-security
-      and to Apache lists.
-    - ASF Security will be notified and will submit to the CVE
-      project and then set state to 'PUBLIC'.
+     - set CVE to READY on the cveprocess site
+     - save the CVE entry
+     - Use the 'OSS/ASF Emails' tab for the emails you should send to oss-security
+       and to Apache lists.
+     - ASF Security will be notified and will submit to the CVE
+       project and then set state to 'PUBLIC'.
+    
+    - In SVN:
+       -  Edit the CVE info (from CHANGES) into the revisions that fixed them in the backport, e.g. `svn propedit --revprop -r... svn:log`
 9. Clean up prior release artifacts
      - https://dist.apache.org/repos/dist/release/httpd (incl CHANGES_2.4.xx)
 10. Review the CHANGES and https://httpd.apache.org/security/vulnerabilities_24.html 
