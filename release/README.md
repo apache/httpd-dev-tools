@@ -5,6 +5,17 @@
 1. make sure `jq` is in your path
 2. have a checkout of https://svn.apache.org/repos/asf/httpd/dev-tools and set environment variable $DEV_TOOLS in the environment
 
+## preflight checks
+
+1. Wherever you can best run the perl framework tests, make sure it's passing on a clean tree
+2. Make sure changes-entries/ is empty and docs xforms have been built and committed
+3. If there is security content:
+   - make sure the SECURITY repo tools/readiness.sh output agrees with what you think is ready.
+   - After this, the security content is public but un-announced and the clock is ticking.
+   - apply to trunk and note the revision in a scratchpad. 
+   - apply to 2.4.x and note the revision in a scratchpad
+4. Make sure the perl framework still passes.
+
 ## Procedure
 
 ### Produce a candidate
@@ -58,7 +69,7 @@
 
      The directory listing can be cached for up to two hours, but validate that you
      can manually access the current release by manipulating the filenames you see from
-     the previous release then move on
+     the previous release then move on (within 15 more minutes?)
 
 3. Stage the other release artifacts:  
 
@@ -72,6 +83,8 @@
    - checks out and modifies project website
    
    To verify, just `svn diff` with a focus on e.g. CHANGES for CVE handling.
+   It is likely you will want to cleanup the SECURITYT changes folded into STATUS
+   because they often have unusual formatting and some redundant info.
 
 4. Up until this point, everything can be reverted with  $DEV_TOOLS/release/reset-candidate.sh
 
@@ -100,8 +113,7 @@
 
 8. Process the CVES that were included.
    - In <https://cveprocess.apache.org>
-     - Fill in a 'reference' tag 'vendor-advisory' with the URL to your public post about
-        this issue.  A link to https://httpd.apache.org/security/vulnerabilities_24.html is sufficient.
+     - Fill in a 'reference' tag 'vendor-advisory' with `https://httpd.apache.org/security/vulnerabilities_24.html`
      - add a timeline entry to the CVE
        > fixed by r... in 2.4.x
      - set CVE to READY on the cveprocess site
@@ -127,8 +139,8 @@
      changes to git@github.com:/apache/httpd-site and can be broken if the
      exported CVE json is missing fields.
      
-     If CHANGES is really bad, consider replacing the various CHANGES files on dist/httpd.
-
+     If CHANGES is really bad, consider replacing the various CHANGES files on dist/httpd
+     (which is dist/apache.org-dist from your working directory checkout for release scripts)
 11. Moderate announcements
     If you are a moderator for announce@httpd.a.o or announce@a.o moderate your own announcement at https://webmod.apache.org/?action=frontpage
     
