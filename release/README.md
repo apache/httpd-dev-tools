@@ -11,8 +11,10 @@
 2. Make sure changes-entries/ is empty and docs xforms have been built and committed
 3. If there is security content:
    - make sure the SECURITY repo tools/readiness.sh output agrees with what you think is ready.
+   - Check open PR's on github to see if anyone had submitted patches for vulnerabilities
+     being fixed, so you can `closes #xxx` to dispose/credit them.
    - After this, the security content is public but un-announced and the clock is ticking.
-   - apply to trunk and note the revision in a scratchpad. 
+   - apply to trunk and note the revision in a scratchpad.
    - apply to 2.4.x and note the revision in a scratchpad
 4. Make sure the perl framework still passes.
 
@@ -21,7 +23,8 @@
 ### Produce a candidate
 1. `cd` to a local checkout of project the branch you want to release. 
 
-   It's best to have a dedicated checkout used for releases, as the tools expect it to be clean. For example `cd ~/asf/httpd-2.4.x-release`
+   It's best to have a dedicated checkout used for releases, as the tools expect it to be clean. 
+   For example `cd ~/asf/httpd-2.4.x-release`
 
 2. If this is an initial release candidate, `rm -rf dist` to throw away the 
    state from the previous release
@@ -41,10 +44,10 @@
 5. Push tarballs for voting: 
 
    `$DEV_TOOLS/release/r2-prep-vote.sh`
-    
+
    Tarballs are available at https://dist.apache.org/repos/dist/dev/ now
    and a draft email for voting is output and left in `dist/`.
-  
+
 6. Send the email, do your own testing, and monitor the thread
 
 ### Handle vote results
@@ -113,7 +116,8 @@
 
 8. Process the CVES that were included.
    - In <https://cveprocess.apache.org>
-     - Fill in a 'reference' tag 'vendor-advisory' with `https://httpd.apache.org/security/vulnerabilities_24.html`
+     -  Fill in a 'reference' tag 'vendor-advisory' with:
+       `https://httpd.apache.org/security/vulnerabilities_24.html`
      - add a timeline entry to the CVE
        > fixed by r... in 2.4.x
      - set CVE to READY on the cveprocess site
