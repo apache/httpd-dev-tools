@@ -35,6 +35,8 @@
 
    Review the output, including picking up any ready CVEs (based on tools/readiness.sh output)
 
+   Monitor the CI run for the tag getting pushed: https://github.com/apache/httpd/actions
+
 4. Prepare the tarballs: 
 
    `$DEV_TOOLS/release/r1-make-tars.sh`
