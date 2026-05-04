@@ -169,6 +169,7 @@
 12. Add the release to bugzilla: 
     
     <https://bz.apache.org/bugzilla/editversions.cgi?action=add&product=Apache%20httpd-2>
+13. Commit any tests for CVEs that were resolved in the release.
 
 
 ## Misc notes
