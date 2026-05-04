@@ -91,9 +91,11 @@
    It is likely you will want to cleanup the SECURITYT changes folded into STATUS
    because they often have unusual formatting and some redundant info.
 
+   If the docs/ changes are all total noise, consider svn `revert -R docs`
+
 4. Up until this point, everything can be reverted with  $DEV_TOOLS/release/reset-candidate.sh
 
-5. Commit additionals staged release artifacts: 
+5. Commit additional staged release artifacts: 
 
    `$DEV_TOOLS/release/r5-commit-staged-release.sh`
 
@@ -117,22 +119,36 @@
    The script will guide you how to send the emails.
 
 8. Process the CVES that were included.
-   - In <https://cveprocess.apache.org>
-     -  Fill in a 'reference' tag 'vendor-advisory' with:
-       `https://httpd.apache.org/security/vulnerabilities_24.html`
-     - add a timeline entry to the CVE
-       > fixed by r... in 2.4.x
+
+   The released moved the included CVEs into the ../resolved/ directory and you also
+   hopefully have a list of them from the notes taken while backporting.
+
+   1. `tools/update_cve_for_release.py` adds the reference tag and 2.4.x revision to the CVE
+       and sends it back to cveprocess.a.o.  This can be done manually instead:
+
+       - In <https://cveprocess.apache.org>
+         -  Fill in a 'reference' tag 'vendor-advisory' with:
+         `https://httpd.apache.org/security/vulnerabilities_24.html`
+         - add a timeline entry to the CVE
+           > fixed by r... in 2.4.x
+   2. In <https://cveprocess.apache.org>
      - set CVE to READY on the cveprocess site
      - save the CVE entry
      - Use the 'OSS/ASF Emails' tab for the emails you should send to oss-security
        and to Apache lists.
      - ASF Security will be notified and will submit to the CVE
        project and then set state to 'PUBLIC'.
-    
-    - In SVN:
-       -  Edit the CVE info (from CHANGES) into the revisions that fixed them in the backport, e.g. `svn propedit --revprop -r... svn:log`
+
+   3. `tools/update_svn_logs_with_cve.py` generates a shell script that updates
+       the 2.4.x SVN commits to includ the CVE names. This can be done manually:
+
+      - In SVN:
+        -  Edit the CVE info (from CHANGES) into the revisions that fixed
+           them in the backport, e.g. `svn propedit --revprop -r... svn:log`
+
 9. Clean up prior release artifacts
      - https://dist.apache.org/repos/dist/release/httpd (incl CHANGES_2.4.xx)
+
 10. Review the CHANGES and https://httpd.apache.org/security/vulnerabilities_24.html 
 
      ... For style and tweak as needed. git@github.com:/apache/httpd-site has
