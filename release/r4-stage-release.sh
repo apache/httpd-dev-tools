@@ -137,6 +137,7 @@ git clone "${GIT_SITE_URL}" "${DIST_SITEPATH}"
 #Update the site content with the new release date and version
 echo "updating site content for ${PROJECT}-${VERSION}"
 iso_date=`date +%Y-%m-%d`
+timeline_timestamp=`date -u +%Y-%m-%dT12:00:00.000Z`
 perl -pi -e "s/${v_major}\.${v_minor}\.\d+/${VERSION}/g" "${DIST_SITEPATH}"/content/doap.rdf
 perl -pi -e "s|<created>.*|<created>$iso_date</created>|g" "${DIST_SITEPATH}"/content/doap.rdf
 
@@ -153,7 +154,7 @@ fi
 
 if test -n "${CVE_DIRS}"; then
     echo "adding timeline entry to CVEs and copy to site"
-    TIMELINE_ENTRY='{"lang":"eng","time":"'"${iso_date}"'","value":"'"${VERSION}"' released"}'
+    TIMELINE_ENTRY='{"lang":"eng","time":"'"${timeline_timestamp}"'","value":"'"${VERSION}"' released"}'
     for CVE in $CVE_DIRS; do
       CVE_JSON="${DIST_DIR}/pmc/SECURITY/${CVE}/CVE.json"
       test -f "$CVE_JSON" || fail "not found: ${CVE_JSON}"
