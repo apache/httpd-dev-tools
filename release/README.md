@@ -60,7 +60,6 @@
 
 #### On vote success
 
-
 1. Push the release tarballs
 
    `$DEV_TOOLS/release/r3-push-release-tars.sh`
@@ -76,17 +75,24 @@
      can manually access the current release by manipulating the filenames you see from
      the previous release then move on (within 15 more minutes?)
 
-3. Stage the other release artifacts:  
+3. Stage the other release artifacts:
 
-   `$DEV_TOOLS/release/r4-stage-release.sh`
-   
+   1. Add the 2.4.x backport revisions to the CVE JSON files, so they will be
+      in the copies incorporated onto the website.
+
+      This can currently be done with:
+       cveprocess_update.py CVE-xxxx/CVE.json --backport r1xxxx
+       cveprocess_put.py CVE-xxxx/CVE.json
+
+   2.Run: `$DEV_TOOLS/release/r4-stage-release.sh`
+
    ALL CHANGES HERE ARE LOCAL ONLY
 
    - folds in CVE related information for CHANGES files
    - moves CVEs to pmc/resolved
    -  update ./CHANGES ./STATUS ./include/ap_release.h
    - checks out and modifies project website
-   
+
    To verify, just `svn diff` with a focus on e.g. CHANGES for CVE handling.
    It is likely you will want to cleanup the SECURITYT changes folded into STATUS
    because they often have unusual formatting and some redundant info.
@@ -96,6 +102,7 @@
 4. Up until this point, everything can be reverted with  $DEV_TOOLS/release/reset-candidate.sh
 
 5. Commit additional staged release artifacts: 
+
 
    `$DEV_TOOLS/release/r5-commit-staged-release.sh`
 
@@ -123,15 +130,7 @@
    The released moved the included CVEs into the ../resolved/ directory and you also
    hopefully have a list of them from the notes taken while backporting.
 
-   1. `tools/update_cve_for_release.py` adds the reference tag and 2.4.x revision to the CVE
-       and sends it back to cveprocess.a.o.  This can be done manually instead:
-
-       - In <https://cveprocess.apache.org>
-         -  Fill in a 'reference' tag 'vendor-advisory' with:
-         `https://httpd.apache.org/security/vulnerabilities_24.html`
-         - add a timeline entry to the CVE
-           > fixed by r... in 2.4.x
-   2. In <https://cveprocess.apache.org>
+   1. In <https://cveprocess.apache.org>
      - set CVE to READY on the cveprocess site
      - save the CVE entry
      - Use the 'OSS/ASF Emails' tab for the emails you should send to oss-security
@@ -139,12 +138,16 @@
      - ASF Security will be notified and will submit to the CVE
        project and then set state to 'PUBLIC'.
 
-   3. `tools/update_svn_logs_with_cve.py` generates a shell script that updates
-       the 2.4.x SVN commits to includ the CVE names. This can be done manually:
-
-      - In SVN:
-        -  Edit the CVE info (from CHANGES) into the revisions that fixed
-           them in the backport, e.g. `svn propedit --revprop -r... svn:log`
+   2. `tools/update_svn_logs_with_cve.py` generates a shell script that updates
+       the 2.4.x SVN commits to includ the CVE names. 
+   
+       The input is a text file with stanzas like this:
+       ```
+       CVE-2026-33857-oob_reads_in_ajp_get_functions
+            trunk: 1933340
+            2.4.x: 1933341
+       ```
+      This can be done manually with  `svn propedit --revprop -r... svn:log`
 
 9. Clean up prior release artifacts
      - https://dist.apache.org/repos/dist/release/httpd (incl CHANGES_2.4.xx)

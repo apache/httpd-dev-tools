@@ -155,6 +155,17 @@ fi
 if test -n "${CVE_DIRS}"; then
     echo "adding timeline entry to CVEs and copy to site"
     TIMELINE_ENTRY='{"lang":"eng","time":"'"${timeline_timestamp}"'","value":"'"${VERSION}"' released"}'
+
+    # Validation pass
+    for CVE in $CVE_DIRS; do
+      CVE_JSON="${DIST_DIR}/pmc/SECURITY/${CVE}/CVE.json"
+      test -f "$CVE_JSON" || fail "not found: ${CVE_JSON}"
+      CVE_ID=`jq -r .cveMetadata.cveId "${CVE_JSON}"`
+      if ! jq -e 'any(.containers.cna.timeline[]?; .value | contains("fixed in 2.4.x"))' < $CVE_JSON; then
+         fail "${CVE_JSON} doesn't have any 'fixed in 2.4.x' timeline when staging content, so it will not be on the website"
+      fi
+    done
+
     for CVE in $CVE_DIRS; do
       CVE_JSON="${DIST_DIR}/pmc/SECURITY/${CVE}/CVE.json"
       test -f "$CVE_JSON" || fail "not found: ${CVE_JSON}"
