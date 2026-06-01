@@ -17,8 +17,10 @@ set -e
 
 usage()
 {
-    echo "usage: $(basename $0) [-r] [-b branch name] [-t target branch name] <revision number> [revision numbers] ..."
-    echo "\t\t -r: resume after handling merge conflicts from a previous run"
+    echo "usage: $(basename $0) [-r] [-b base-branch-name] [-t target-branch-name] <revision number> [revision numbers] ..."
+    printf "\t\t base-branch-name defaults to the currently checked out branch\n"
+    printf "\t\t target-branch-name defaults to 2.4.x\n"
+    printf "\t\t -r: resume after handling merge conflicts from a previous run\n"
     exit
 }
 
