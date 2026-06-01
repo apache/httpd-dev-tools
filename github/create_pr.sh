@@ -13,6 +13,8 @@
 # If gh is available it will be preferred over hub.
 
 
+set -e
+
 usage()
 {
     echo "usage: $(basename $0) [-r] [-b branch name] [-t target branch name] <revision number> [revision numbers] ..."
@@ -20,6 +22,7 @@ usage()
     exit
 }
 
+REPO=apache/httpd
 TARGET_BRANCH_NAME="2.4.x"
 RESUME=0
 
@@ -97,7 +100,7 @@ fi
 git push -u origin $BRANCH_NAME
 MESSAGE=`echo "$@" | sed -e 's/ /, r/g'`
 if type -P gh > /dev/null ; then
-    RESULT=`gh pr create -B "$TARGET_BRANCH_NAME" -b "Merge r${MESSAGE} from trunk" --title "Merge r${MESSAGE} from trunk"`
+    RESULT=`gh pr create --repo $REPO -B "$TARGET_BRANCH_NAME" -b "Merge r${MESSAGE} from trunk" --title "Merge r${MESSAGE} from trunk"`
 else
     RESULT=`hub pull-request -b "apache:${TARGET_BRANCH_NAME}" -m "Merge r${MESSAGE} from trunk"`
 fi
