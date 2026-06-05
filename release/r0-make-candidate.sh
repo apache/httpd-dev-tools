@@ -86,6 +86,17 @@ if test -d changes-entries; then
   fi
 fi
 
+# Format CVE list with newlines for readability
+if test -n "${CVE_DIRS}"; then
+  CVE_COUNT=$(echo "${CVE_DIRS}" | wc -w | tr -d ' ')
+  CVE_LIST=$(echo "${CVE_DIRS}" | tr ' ' '\n' | sed 's/^/    /')
+  CVE_HEADER="  CVEs (${CVE_COUNT}):"
+else
+  CVE_COUNT=0
+  CVE_LIST="    none"
+  CVE_HEADER="  CVEs:"
+fi
+
 cat <<EOF
 creating release candidate:
   PROJECT: $PROJECT
@@ -94,7 +105,8 @@ creating release candidate:
   SOURCE: $SVN_SRC@$SVN_REV
   DEST: $SVN_DEST
   LOCAL: $DEST_DIR
-  CVEs: ${CVE_DIRS:-none}
+${CVE_HEADER}
+${CVE_LIST}
 EOF
 if ! ask_yes_no "Is this as expected?"; then
   exit 1
@@ -181,7 +193,8 @@ if ask_yes_no "Do you want to commit these?"; then
   save_version
 
   if test -n "${CVE_DIRS}"; then
-    echo "Saving CVE information for ${PROJECT}-${FULL_VERSION}"
+    CVE_COUNT=$(echo "${CVE_DIRS}" | wc -w | tr -d ' ')
+    echo "Saving CVE information for ${PROJECT}-${FULL_VERSION} (${CVE_COUNT} CVEs)"
     mkdir "${DIST_DIR}/pmc/SECURITY/${PROJECT}-${FULL_VERSION}"
     pushd "${DIST_DIR}/pmc/SECURITY/${PROJECT}-${FULL_VERSION}"
     for CVE in $CVE_DIRS; do
@@ -189,6 +202,10 @@ if ask_yes_no "Do you want to commit these?"; then
     done
     popd
     svn add "${DIST_DIR}/pmc/SECURITY/${PROJECT}-${FULL_VERSION}"
-    svn commit -m "CVEs included in ${PROJECT}-${FULL_VERSION}" "${DIST_DIR}/pmc"
+    
+    # Format CVE list for commit message
+    CVE_COMMIT_LIST=$(echo "${CVE_DIRS}" | tr ' ' '\n' | sed 's/^/  - /')
+    svn commit -m "CVEs included in ${PROJECT}-${FULL_VERSION} (${CVE_COUNT} total):
+${CVE_COMMIT_LIST}" "${DIST_DIR}/pmc"
   fi
 fi
