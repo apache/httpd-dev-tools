@@ -77,34 +77,43 @@
 
 3. Stage the other release artifacts:
 
-   1. Add the 2.4.x backport revisions to the CVE JSON files, so they will be
+   1. Confirm the 2.4.x backport revisions in the CVE JSON files, so they will be
       in the copies incorporated onto the website.
 
-      This can currently be done with:
+      This is best done during backporting, in which case you can compare
+      the output of tools/readiness.sh with tools/readiness.sh -B (should result in
+      the same total).
+
+      If it was missed, the info can be added at this stage with:
        cveprocess_update.py CVE-xxxx/CVE.json --backport r1xxxx
        cveprocess_put.py CVE-xxxx/CVE.json
 
-   2.Run: `$DEV_TOOLS/release/r4-stage-release.sh`
+   2. Run: `$DEV_TOOLS/release/r4-stage-release.sh`
 
-   ALL CHANGES HERE ARE LOCAL ONLY
+      ALL CHANGES HERE ARE LOCAL ONLY
 
-   - folds in CVE related information for CHANGES files
-   - moves CVEs to pmc/resolved
-   -  update ./CHANGES ./STATUS ./include/ap_release.h
-   - checks out and modifies project website
+      - folds in CVE related information for CHANGES files
+      - moves CVEs to pmc/resolved
+      -  update ./CHANGES ./STATUS ./include/ap_release.h
+      - checks out and modifies project website
 
-   To verify, just `svn diff` with a focus on e.g. CHANGES for CVE handling.
-   It is likely you will want to cleanup the SECURITYT changes folded into STATUS
-   because they often have unusual formatting and some redundant info.
+      To verify, just `svn diff` with a focus on e.g. CHANGES for CVE handling.
+      It is likely you will want to cleanup the SECURITYT changes folded into STATUS
+      because they often have unusual formatting and some redundant info.
 
-   If the docs/ changes are all total noise, consider svn `revert -R docs`
+      If the docs/ changes are all total noise, consider svn `revert -R docs`
 
-4. Up until this point, everything can be reverted with  $DEV_TOOLS/release/reset-candidate.sh
+4. Up until this point, everything can be reverted with:
 
-5. Commit additional staged release artifacts: 
+   ```
+   $DEV_TOOLS/release/reset-candidate.sh
+   ```
 
+5. Commit additional staged release artifacts:
 
-   `$DEV_TOOLS/release/r5-commit-staged-release.sh`
+   ```
+   $DEV_TOOLS/release/r5-commit-staged-release.sh
+   ```
 
    This commits all locally staged changes to repositories and website.
 
@@ -121,8 +130,10 @@
 
 7. Send the announcements: 
 
-   `$DEV_TOOLS/release/r6-announce.sh`
-  
+   ```
+   $DEV_TOOLS/release/r6-announce.sh
+   ```
+
    The script will guide you how to send the emails.
 
 8. Process the CVES that were included.
@@ -131,17 +142,25 @@
    hopefully have a list of them from the notes taken while backporting.
 
    1. In <https://cveprocess.apache.org>
+
      - set CVE to READY on the cveprocess site
      - save the CVE entry
+
+       This can be automated with cveprocess_update -r but make sure to not remove
+       the "released in 2.4.68" timeline which is not present locally
+
      - Use the 'OSS/ASF Emails' tab for the emails you should send to oss-security
        and to Apache lists.
+
      - ASF Security will be notified and will submit to the CVE
        project and then set state to 'PUBLIC'.
 
    2. `tools/update_svn_logs_with_cve.py` generates a shell script that updates
        the 2.4.x SVN commits to includ the CVE names. 
-   
-       The input is a text file with stanzas like this:
+
+       The input is a text file with stanzas like this which is just the way Eric
+       tracks them locally (we could get it from CVE.json these days)
+
        ```
        CVE-2026-33857-oob_reads_in_ajp_get_functions
             trunk: 1933340
