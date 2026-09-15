@@ -128,7 +128,8 @@ for sha in $commits; do
     # Fetch the patch
     patch_file=$(mktemp /tmp/gh-pr-patch.XXXXXX)
     trap "rm -f '$patch_file'" EXIT
-    curl -sL "$GITHUB_URL/commit/$sha.patch" -o "$patch_file"
+    gh api "/repos/$REPO/commits/$sha" -H "Accept: application/vnd.github.v3.patch" \
+       > "$patch_file"
 
     # Apply the patch
     apply_args=""
