@@ -89,23 +89,35 @@ In trunk order:
 git cherry-pick -x <hash>
 ```
 
-Then rewrite the message with `git commit --amend -F <file>` (file in the scratchpad):
-the trunk message is kept **as-is**, except the `git-svn-id:` line is removed and the end
-of the message becomes:
+**Every pick drops the trunk `git-svn-id:` line**, amended out with
+`git commit --amend -F <file>` (file in the scratchpad): it names trunk's svn revision,
+and the 2.4.x commit gets its own `git-svn-id:` when it reaches svn, so a kept one is
+duplicated there. Collapse the blank lines it leaves to one.
+
+**A commit used exactly as-is** (it applies cleanly and nothing is dropped from it) keeps
+the rest of the message `cherry-pick -x` gives it: the trunk message byte-for-byte, then
+`(cherry picked from commit <full hash>)`.
+
+**A commit that cannot be used as-is** (a conflict resolved, hunks or files omitted, a
+backport-specific fix folded in) also opens with a prefix saying what differs:
 
 ```
-Merge r1234567 from trunk.
+Merge r1234567 from trunk (test/modules/arch/linux changes omitted):
+
+<trunk message>
 (cherry picked from commit <full hash>)
 ```
 
-Trunk trailers (`Submitted by:`, `PR:`, `Github:` etc.) stay where they were, above those
-two lines. No `Co-Authored-By` trailer for a clean pick: the change is the trunk
-author's. Never a `Claude-Session` trailer.
+Keep the parenthesis brief: `conflicts resolved in modules/ssl/ssl_engine_io.c`, `docs changes
+omitted`. Trunk trailers (`Submitted by:`, `PR:`, `Github:` etc.) stay where they were.
+No `Co-Authored-By` trailer unless the change to the trunk commit was substantive. Never a
+`Claude-Session` trailer.
 
 **Always exclude `docs/log-message-tags/`**: it is maintained only on trunk. Drop any
 change to it from the pick (`git rm -f` a file the pick adds, `git checkout HEAD --` one
 it modifies) before committing; the `APLOGNO()` numbers in the code are allocated on trunk
-and are backported unchanged. No omission note is needed for this.
+and are backported unchanged. This alone does not count as a change to the commit: no
+prefix is needed for it, though the pick must then be amended to commit without it.
 
 Conflicts:
 
@@ -115,14 +127,14 @@ Conflicts:
   the rev has one.
 - If a rev depends on an earlier trunk rev not in the list, **stop** and report it,
   suggesting that rev be added, rather than writing the missing code.
-- Note a resolved conflict in that commit, as a line above the `Merge` line:
-  `[conflicts resolved in path/to/file.c]`. Add `Co-Authored-By` only if the resolution
-  was substantive. Flag it in the report and the PR body.
+- A resolved conflict makes the commit one that cannot be used as-is: give it the
+  `Merge r<x> from trunk (conflicts resolved in <file>):` prefix above, and flag it in the
+  report and the PR body.
 
 Omitted files: if the user asks for code only, or a rev's test files don't exist on 2.4.x,
-drop those hunks (`git rm -f` / `git checkout HEAD --`). Then remove the `* docs/...` and
-`* test/...` bullet paragraphs for them from the message, and add no omission note: the
-message describes only what the commit contains.
+drop those hunks (`git rm -f` / `git checkout HEAD --`), give the commit the prefix above
+(`(docs and test changes omitted)`), and remove the `* docs/...` and `* test/...` bullet
+paragraphs for them from the trunk message, so it describes only what the commit contains.
 
 ## 4. Build
 
@@ -152,7 +164,10 @@ Draft the PR:
 
 - Subject: `[2.4.x] Merge changes to <topic>`
 - Body: a `Merge ... from trunk:` line, then each trunk message inline-quoted (every line
-  prefixed with `> `, `git-svn-id:` line removed), a blank line between them:
+  prefixed with `> `), a blank line between them. Take each revision from the trunk
+  commit named in its `(cherry picked from commit ...)` line (`git-svn-id: ...trunk@NNN`
+  there). Quote the trunk message only: drop the `(cherry picked from ...)` line and any
+  `Merge r...` prefix, whose explanation belongs in a note instead:
 
   ```
   Merge r1234567, r2345678 from trunk:
