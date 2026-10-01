@@ -413,15 +413,27 @@ add_changes_entry() {
 
   cp "${CHANGES}" "${CHANGES}.tmp" ;
   cve_changes "${CVE_JSON}" > "${CHANGES}.entry.tmp"
-  awk -v fname="${CHANGES}.entry.tmp" \
-    'BEGIN{done = 0; active = 0} done == 0 && active == 0 && /^Changes with Apache /{
+  # Insert the entry at the top of the first "Changes with Apache" section,
+  # or at the end of the file when that section has no entries yet.
+  # Exits non-zero when no section was found, rather than dropping the entry.
+  if ! awk -v fname="${CHANGES}.entry.tmp" \
+    'function add_entry() {
+        while ((getline line < fname) > 0) {
+          if (! (line ~ /^ *$/)){print line}
+        }
+        printf "\n"; done = 1
+      }
+      BEGIN{done = 0; active = 0} done == 0 && active == 0 && /^Changes with Apache /{
         active = 1; print; next};
       /^( *\*|Changes with Apache )/ && active == 1 && done == 0 {
-        rec=$0; while(getline<fname) {
-          if (! ($0 ~ /^ *$/)){print}
-        }
-        printf "\n"; print rec; active = 0; done = 1; next
-      } //;' "${CHANGES}".tmp > "${CHANGES}"
+        rec=$0; add_entry(); print rec; active = 0; next
+      } //;
+      END { if (active == 1 && done == 0) add_entry(); if (done == 0) exit 1 }' \
+      "${CHANGES}".tmp > "${CHANGES}"; then
+    mv "${CHANGES}".tmp "${CHANGES}"
+    rm -f "${CHANGES}.entry.tmp"
+    fail "add_changes_entry: no 'Changes with Apache' section in ${CHANGES}"
+  fi
   rm -f "${CHANGES}".tmp "${CHANGES}.entry.tmp"
 }
 

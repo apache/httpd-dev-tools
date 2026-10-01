@@ -129,8 +129,7 @@
       - folds in CVE related information for CHANGES files (and fails if any CVE is missing)
       - moves CVEs to pmc/resolved
       -  update ./CHANGES ./STATUS ./include/ap_release.h
-      - checks out and modifies project website, hiding the CHANGES_$VERSION
-        links on download.md and index.md until r6 has checked the CDN
+      - checks out and modifies project website
 
       To verify, just `svn diff` with a focus on e.g. CHANGES for CVE handling.
       It is likely you will want to cleanup the SECURITY changes entries folded into STATUS
@@ -169,13 +168,14 @@
    $DEV_TOOLS/release/r6-announce.sh
    ```
 
-   Before the emails, the script checks that CHANGES_$VERSION on
-   downloads.apache.org and dlcdn.apache.org matches SVN, then restores the
-   CHANGES_$VERSION links on the site (it asks before pushing).
+   Before the emails, the script checks that CHANGES_$VERSION and CHANGES_2.4 on
+   downloads.apache.org and dlcdn.apache.org match SVN.
 
-   If the check fails, the CDN is serving a stale copy (e.g. one cached before
-   the CVEs were added). Wait, or ask ASF Infra (#asfinfra or an INFRA Jira) to purge
-   https://dlcdn.apache.org/httpd/CHANGES_$VERSION, then rerun r6.
+   If the check fails, the CDN is serving a stale copy. downloads.apache.org
+   lags SVN by a few minutes after r5, and whatever dlcdn fetches in that
+   window stays cached (about 30 minutes for 2.4.69). Avoid fetching the CHANGES
+   files from dlcdn until downloads.apache.org shows the new Last-Modified.
+   Wait and rerun r6, or ask ASF Infra (#asfinfra or an INFRA Jira) to purge.
 
    The script will guide you how to send the emails.
 
@@ -322,8 +322,7 @@ What r4-stage-release.sh does:
  - It retrieves the "ready" CVE list, adds the desription to the CHANGES
    files in the dist/release directory and the CHANGES in your local checkout
  - it moves the CVEs into the pmc/resolved directory, locally.
- - It updates dates and version numbers in the website files, and hides
-   the CHANGES_$VERSION links (restored by r6).
+ - It updates dates and version numbers in the website files
  - It increments the version patch number and modifies your local
    checkout for work on the next version.
  - It lists you all files changed in those location and JUST EXITS.
@@ -335,10 +334,8 @@ What r5-commit-staged-release.sh does:
    the SECURITY information publicly available via the release/CHANGES* files.
 
 What r6-announce.sh does:
- - It checks that CHANGES_$VERSION on downloads.apache.org and
-   dlcdn.apache.org matches SVN, and fails if not.
- - It restores the CHANGES_$VERSION links on the site that r4 hid, and
-   pushes that change after asking.
+ - It checks that CHANGES_$VERSION and CHANGES_$v_major.$v_minor on
+   downloads.apache.org and dlcdn.apache.org match SVN, and fails if not.
  - It reminds you what is still to do.
    * send a mail to the correct announce mailing lists
    * set the included CVEs on the Apache CVE process site to READY.

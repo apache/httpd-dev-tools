@@ -71,6 +71,7 @@ svn ls "$SVN_BASE/$SVN_RELEASE" >/dev/null 2>&1 ||
   fail_not_dry "release does not exist in SVN: $SVN_RELEASE"
 
 AO_DIST_PATH="dist/apache.org-dist"
+AO_DIST_DEV_PATH="${AO_DIST_PATH}/dev/${PROJECT}"
 AO_DIST_RELEASE_PATH="${AO_DIST_PATH}/release/${PROJECT}"
 
 DIST_SITEPATH="${DIST_DIR}/site"
@@ -83,6 +84,21 @@ echo "checking out dist from ${SVN_DIST_URL} ..."
 svn checkout --depth=empty "$SVN_DIST_URL" "${AO_DIST_PATH}" >/dev/null
 echo "checking out ${AO_DIST_RELEASE_PATH} ..."
 svn update --set-depth immediates --parents "${AO_DIST_RELEASE_PATH}" >/dev/null
+echo "checking out ${AO_DIST_DEV_PATH} ..."
+svn update --set-depth immediates --parents "${AO_DIST_DEV_PATH}" >/dev/null
+
+# r3-push-release-tars.sh leaves the CHANGES files in dev, so that they are
+# published in release only together with the CVE information added below.
+if test -f "${AO_DIST_DEV_PATH}/CHANGES_${VERSION}"; then
+  echo "moving ${AO_DIST_DEV_PATH}/CHANGES_${VERSION} to release"
+  svn mv "${AO_DIST_DEV_PATH}/CHANGES_${VERSION}" "${AO_DIST_RELEASE_PATH}"/ >/dev/null
+fi
+if test -f "${AO_DIST_DEV_PATH}/CHANGES_${v_major}.${v_minor}"; then
+  echo "copying ${AO_DIST_DEV_PATH}/CHANGES_${v_major}.${v_minor} to release"
+  #We cannot move since these exist in the destination
+  cp "${AO_DIST_DEV_PATH}/CHANGES_${v_major}.${v_minor}" "${AO_DIST_RELEASE_PATH}"/
+  svn rm --force "${AO_DIST_DEV_PATH}/CHANGES_${v_major}.${v_minor}" >/dev/null
+fi
 
 if ! ls "${AO_DIST_RELEASE_PATH}/${TAR_BASENAME}".tar.* >/dev/null 2>&1; then
   fail_not_dry "release tar not found: ${AO_DIST_RELEASE_PATH}/${TAR_BASENAME}.tar.*"
@@ -102,11 +118,20 @@ fi
 get_version_CVE_DIRS "${DIST_DIR}/pmc"
 if test -n "${CVE_DIRS}"; then
   echo "adding CVEs: ${CVE_DIRS}"
-  for changes in CHANGES \
-    "${AO_DIST_RELEASE_PATH}/CHANGES_${v_major}.${v_minor}" \
-    "${AO_DIST_RELEASE_PATH}/CHANGES_${VERSION}"; do
+  ALL_CHANGES="CHANGES
+    ${AO_DIST_RELEASE_PATH}/CHANGES_${v_major}.${v_minor}
+    ${AO_DIST_RELEASE_PATH}/CHANGES_${VERSION}"
+  for changes in $ALL_CHANGES; do
     for CVE in $CVE_DIRS; do
       add_changes_entry "$changes" "${DIST_DIR}/pmc/SECURITY/${CVE}/CVE.json"
+    done
+  done
+  # make sure every CVE made it into every CHANGES file
+  for CVE in $CVE_DIRS; do
+    CVE_ID=`jq -r .cveMetadata.cveId "${DIST_DIR}/pmc/SECURITY/${CVE}/CVE.json"`
+    for changes in $ALL_CHANGES; do
+      grep -qF "SECURITY: ${CVE_ID}:" "$changes" ||
+        fail_not_dry "${CVE_ID} is missing from ${changes}"
     done
   done
 fi
@@ -203,7 +228,7 @@ echo
 echo "PENDING REPOSITORY CHANGES"
 echo "--------"
 echo "SVN changes staged for ${SVN_DIST_URL}"
-svn stat "${AO_DIST_RELEASE_PATH}"
+svn stat "${AO_DIST_PATH}"
 echo "--------"
 echo "SVN changes staged in pmc/${PROJECT}"
 svn stat "${DIST_DIR}/pmc"

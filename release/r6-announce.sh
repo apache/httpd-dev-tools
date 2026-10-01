@@ -67,6 +67,17 @@ if ! test -f "${AO_DIST_RELEASE_PATH}/${ANNOUNCEMENT}"; then
   fail "not found: ${AO_DIST_RELEASE_PATH}/${ANNOUNCEMENT}"
 fi
 
+# downloads.apache.org syncs from SVN with some delay, and anything the CDN
+# fetches in the meantime (an outdated file or a 404) stays cached for a while.
+for changes in "CHANGES_${VERSION}" "CHANGES_${v_major}.${v_minor}"; do
+  for base in "https://downloads.apache.org/${PROJECT}" "https://dlcdn.apache.org/${PROJECT}"; do
+    echo "verifying ${base}/${changes} ..."
+    if ! curl -fsSL "${base}/${changes}" |
+         cmp -s - "${AO_DIST_RELEASE_PATH}/${changes}"; then
+      fail "${base}/${changes} does not match SVN. Wait (the CDN cache expires within about 30 minutes) or ask ASF Infra to purge it, then rerun $0"
+    fi
+  done
+done
 
 DATE=`date '+%a, %d %b %Y %H:%M:%S %z'`
 email="${asf_id}@apache.org"

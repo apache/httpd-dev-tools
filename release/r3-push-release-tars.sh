@@ -92,16 +92,15 @@ if test "${VERSION}" != "${FULL_VERSION}"; then
     perl -pe "s/${FULL_VERSION}/${VERSION}/" -i $file
   done
 fi
-svn mv "${AO_DIST_DEV_PATH}/CHANGES_${VERSION}" "${AO_DIST_RELEASE_PATH}"/
+# CHANGES_${VERSION} and CHANGES_${v_major}.${v_minor} stay in dev. They lack
+# the CVE information, and anything fetched from release now may be cached by
+# the CDN, so r4-stage-release.sh moves them once the CVEs are folded in.
 
 # remove dependency tars from dev
 if ls "${AO_DIST_DEV_PATH}/httpd-${FULL_VERSION}-deps".tar.* >/dev/null 2>&1;then
   svn rm --force "${AO_DIST_DEV_PATH}/httpd-${FULL_VERSION}-deps".tar.*
 fi
 
-#We cannot move since these exist in the destination
-cp "${AO_DIST_DEV_PATH}/CHANGES_${v_major}.${v_minor}" "${AO_DIST_RELEASE_PATH}"/
-svn rm --force "${AO_DIST_DEV_PATH}/CHANGES_${v_major}.${v_minor}"
 #Note we don't delete the Announce files since it is our template
 
 echo ""

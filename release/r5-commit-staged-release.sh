@@ -61,7 +61,7 @@ echo
 echo "PENDING REPOSITORY CHANGES"
 echo "--------"
 echo "SVN changes staged for ${SVN_DIST_URL}"
-svn stat "${AO_DIST_RELEASE_PATH}"
+svn stat "${AO_DIST_PATH}"
 echo "--------"
 echo "SVN changes staged in pmc/${PROJECT}"
 svn stat "${DIST_DIR}/pmc"
@@ -79,8 +79,9 @@ if ask_yes_no "Do you want to commit these changes?"; then
 
     # echo nop: svn commit -m "${MSG}" "${DIST_DIR}/pmc"
     svn commit -m "${MSG}" "${DIST_DIR}/pmc"
-    # echo nop: svn commit -m "${MSG}" "${AO_DIST_RELEASE_PATH}"
-    svn commit -m "${MSG}" "${AO_DIST_RELEASE_PATH}"
+    # dev is included: r4 moved the CHANGES files from dev to release
+    # echo nop: svn commit -m "${MSG}" "${AO_DIST_PATH}"
+    svn commit -m "${MSG}" "${AO_DIST_PATH}"
     # echo nop: svn commit -m "${MSG}" .
     svn commit -m "${MSG}" .
     # echo "nop: cd ${DIST_SITEPATH}; git commit -m ${MSG}"
