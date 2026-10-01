@@ -7,31 +7,48 @@
 
 ## preflight checks
 
-1. Wherever you can best run the perl framework tests, make sure it's passing on a clean tree
+1. Wherever you can best run the test suite(s), make sure it's passing on a clean tree
 2. Make sure changes-entries/ is empty and docs xforms have been built and committed
 3. If there is security content:
+   - Use `cveprocess_update.py --release` on all CVE's to make sure there are no stale version
+     references. We often fill in the affected/fixed ranges when the CVE is accepted, but
+     they may not make the next release.  Checkin the changes and cveprocess_put.py them
    - make sure the SECURITY repo tools/readiness.sh output agrees with what you think is ready.
    - Check open PR's on github to see if anyone had submitted patches for vulnerabilities
      being fixed, so you can `closes #xxx` to dispose/credit them.
    - After this, the security content is public but un-announced and the clock is ticking.
    - apply to trunk and note the revision in a scratchpad.
-   - apply to 2.4.x and note the revision in a scratchpad
-4. Make sure the perl framework still passes.
+     The scratchpad should look something like this to be used by some security tools later for bulk 
+     updates (e.g. update_svn_logs_with_cve.py)
+
+     CVE-XXXX-yyyy-foo-bar
+         trunk: 1912345
+         2.4.x: 1912346
+
+   - apply to 2.4.x and note the revision in a scratchpad.
+4. Make sure the test suite(s) still passes (or wait/watch CI runs)
 
 ## Procedure
 
 ### Produce a candidate
+
 1. `cd` to a local checkout of project the branch you want to release. 
 
-   It's best to have a dedicated checkout used for releases, as the tools expect it to be clean. 
+   Make sure it's up to date and has no local changes.
+
+   It's best to have a dedicated checkout used for releases, as the tools expect it to be clean
+   (no unversioned files).
+
    For example `cd ~/asf/httpd-2.4.x-release`
 
 2. If this is an initial release candidate, `rm -rf dist` to throw away the 
    state from the previous release
 
-3. Prepare the release: 
+3. Prepare the release:
 
-   `$DEV_TOOLS/release/r0-make-candidate.sh rc1`
+   ```
+   $DEV_TOOLS/release/r0-make-candidate.sh rc1
+   ```
 
    Review the output, including picking up any ready CVEs (based on tools/readiness.sh output)
 
@@ -39,13 +56,17 @@
 
 4. Prepare the tarballs: 
 
-   `$DEV_TOOLS/release/r1-make-tars.sh`
+   ```
+   $DEV_TOOLS/release/r1-make-tars.sh
+   ```
 
    Pay attention as you will likely be prompted for gpg login.
 
 5. Push tarballs for voting: 
 
-   `$DEV_TOOLS/release/r2-prep-vote.sh`
+   ```
+   $DEV_TOOLS/release/r2-prep-vote.sh
+   ```
 
    Tarballs are available at https://dist.apache.org/repos/dist/dev/ now
    and a draft email for voting is output and left in `dist/`.
@@ -66,6 +87,8 @@
 
     - tars are moved to https://dist.apache.org/repos/dist/release/httpd/
     - the SVN tags/$FULL_VERSION-candidate is moved to tags/$VERSION
+    - CHANGES_$VERSION and CHANGES_2.4 stay in dist/dev until r4, so they
+      are never published without the CVE information.
 
 2. Wait for files to be available
    - Validate <https://downloads.apache.org/httpd/> (within 15 minutes)
@@ -80,25 +103,37 @@
    1. Confirm the 2.4.x backport revisions in the CVE JSON files, so they will be
       in the copies incorporated onto the website.
 
-      This is best done during backporting, in which case you can compare
-      the output of tools/readiness.sh with tools/readiness.sh -B (should result in
+      If you were tracking the backports in a file, you can add the data with
+      `tools/update_cvejson_with_revisions.py`
+
+      ```
+          tools/update_cvejson_with_revisions.py --dry-run httpd-2.4.NN.txt
+          tools/update_cvejson_with_revisions.py httpd-2.4.NN.txt
+          # Runs a series of tools/cveprocess_update.py CVE-xxxx/CVE.json --backport r1xxxx
+          svn ci
+          tools/update_cvejson_with_revisions.py --put httpd-2.4.NN.txt
+          # runs a series of tools/cveprocess_put.py CVE-xxxx/CVE.json
+      ```
+
+      Compare the output/totals of tools/readiness.sh with tools/readiness.sh -B (should result in
       the same total).
 
-      If it was missed, the info can be added at this stage with:
-       cveprocess_update.py CVE-xxxx/CVE.json --backport r1xxxx
-       cveprocess_put.py CVE-xxxx/CVE.json
+      IMPORTANT: update The SVN checkout in the httpd-2.4.x-release dir you are running the release
+      scripts from (dist/pmc)
 
    2. Run: `$DEV_TOOLS/release/r4-stage-release.sh`
 
       ALL CHANGES HERE ARE LOCAL ONLY
 
-      - folds in CVE related information for CHANGES files
+      - moves CHANGES_$VERSION and CHANGES_2.4 from dist/dev to dist/release
+      - folds in CVE related information for CHANGES files (and fails if any CVE is missing)
       - moves CVEs to pmc/resolved
       -  update ./CHANGES ./STATUS ./include/ap_release.h
-      - checks out and modifies project website
+      - checks out and modifies project website, hiding the CHANGES_$VERSION
+        links on download.md and index.md until r6 has checked the CDN
 
       To verify, just `svn diff` with a focus on e.g. CHANGES for CVE handling.
-      It is likely you will want to cleanup the SECURITYT changes folded into STATUS
+      It is likely you will want to cleanup the SECURITY changes entries folded into STATUS
       because they often have unusual formatting and some redundant info.
 
       If the docs/ changes are all total noise, consider svn `revert -R docs`
@@ -133,6 +168,14 @@
    ```
    $DEV_TOOLS/release/r6-announce.sh
    ```
+
+   Before the emails, the script checks that CHANGES_$VERSION on
+   downloads.apache.org and dlcdn.apache.org matches SVN, then restores the
+   CHANGES_$VERSION links on the site (it asks before pushing).
+
+   If the check fails, the CDN is serving a stale copy (e.g. one cached before
+   the CVEs were added). Wait, or ask ASF Infra (#asfinfra or an INFRA Jira) to purge
+   https://dlcdn.apache.org/httpd/CHANGES_$VERSION, then rerun r6.
 
    The script will guide you how to send the emails.
 
@@ -263,7 +306,9 @@ What r3-push-release-tars.sh does:
    This removes a version suffix. So httpd-2.4.49-rc1.at.gz becomes
    httpd-2.4.49.at.gz in the release dir.
  - It moves the CURRENT-IS-$VERSION file
- - It adds CHANGES_$VERSION and updates CHANGES_$v_major.$v_minor
+ - It leaves CHANGES_$VERSION and CHANGES_$v_major.$v_minor in /dev; r4
+   moves them once the CVE information is added. Anything published to
+   /release can be cached by the CDN (dlcdn.apache.org) for a long time.
  - It moves SVN tags/$FULL_VERSION-candidate tag to tags/$VERSION
  - NO security related information is added yet.
 
@@ -272,10 +317,13 @@ What r4-stage-release.sh does:
    * dist.apache.org/release/$PROJECT
    * $SVN_PMC_URL/$PROJECT where SECURITY information is kept
    * $GIT_SITE_URL where the project website files are kept
+ - It moves CHANGES_$VERSION and CHANGES_$v_major.$v_minor from /dev to
+   /release.
  - It retrieves the "ready" CVE list, adds the desription to the CHANGES
    files in the dist/release directory and the CHANGES in your local checkout
  - it moves the CVEs into the pmc/resolved directory, locally.
- - It updates dates and version numbers in the website files
+ - It updates dates and version numbers in the website files, and hides
+   the CHANGES_$VERSION links (restored by r6).
  - It increments the version patch number and modifies your local
    checkout for work on the next version.
  - It lists you all files changed in those location and JUST EXITS.
@@ -287,7 +335,11 @@ What r5-commit-staged-release.sh does:
    the SECURITY information publicly available via the release/CHANGES* files.
 
 What r6-announce.sh does:
- - It reminds you what is still to do. Not really anything more.
+ - It checks that CHANGES_$VERSION on downloads.apache.org and
+   dlcdn.apache.org matches SVN, and fails if not.
+ - It restores the CHANGES_$VERSION links on the site that r4 hid, and
+   pushes that change after asking.
+ - It reminds you what is still to do.
    * send a mail to the correct announce mailing lists
    * set the included CVEs on the Apache CVE process site to READY.
      so that those descriptions are sent to the relevant lists.
