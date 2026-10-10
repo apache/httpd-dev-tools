@@ -19,7 +19,7 @@ so.
 - If the checkout has an `AGENTS.md`, read it first and follow it. Local guidance there
   (paths, build setup, commit and PR conventions) takes precedence over the defaults in
   this skill.
-- `git fetch origin`. Base on **`origin/2.4.x`**; local `trunk`/`2.4.x` are stale.
+- `git fetch origin`. Base on **`origin/2.4.x`**; local `trunk`/`2.4.x` may be stale.
 - Stay inside this checkout. The only outside paths touched are the read-only APR source
   trees buildconf needs.
 - Find the user's GitHub fork: their login, and the remote that pushes to
@@ -60,9 +60,7 @@ Print a table and confirm it with the user before going further:
 
 ## 2. Branch, worktree, configure
 
-Branch `2.4.x-<topic>`; worktree under `.claude/worktrees/` with a name of **7 characters
-or fewer**, e.g. `bpssl`. The `test/modules/arch/linux` suite binds a unix socket under
-the worktree path, which has to fit the 108-byte `sockaddr_un` limit:
+Branch `2.4.x-<topic>`; worktree under `.claude/worktrees/`:
 
 ```
 git worktree add -b 2.4.x-<topic> .claude/worktrees/<name> origin/2.4.x
@@ -72,7 +70,7 @@ In the worktree (a fresh worktree has no `config.nice`):
 
 ```
 ./buildconf --with-apr=<APR source tree>
-./configure --enable-maintainer-mode --with-ssl --enable-reduced-exports \
+./configure --enable-maintainer-mode --with-ssl \
     --enable-modules=reallyall --enable-mpms-shared=all
 ```
 
@@ -109,7 +107,7 @@ Merge r1234567 from trunk (test/modules/arch/linux changes omitted):
 ```
 
 Keep the parenthesis brief: `conflicts resolved in modules/ssl/ssl_engine_io.c`, `docs changes
-omitted`. Trunk trailers (`Submitted by:`, `PR:`, `Github:` etc.) stay where they were.
+omitted`. Trunk trailers (`Submitted by:`, `PR:`, `GitHub:` etc.) stay where they were.
 No `Co-Authored-By` trailer unless the change to the trunk commit was substantive. Never a
 `Claude-Session` trailer.
 
@@ -147,9 +145,6 @@ make -j$(nproc)
 Never `make -C modules/<dir>`: it leaves the `.so` stale. Treat a new compiler warning in
 the touched files as a failure. Report any failure verbatim, fix it (a backport-specific
 fix goes in that rev's commit, noted as a conflict resolution) and rebuild.
-
-Offer, but don't run by default, `make check-pytest PYTEST_DIRS=test/modules/<pkg>` for
-the affected area.
 
 ## 5. Push, preview the PR, then create it
 
