@@ -187,10 +187,11 @@
    1. In <https://cveprocess.apache.org>
 
      - set CVE to READY on the cveprocess site
-     - save the CVE entry
 
        This can be automated with cveprocess_update -r but make sure to not remove
        the "released in 2.4.68" timeline which is not present locally
+
+     - save the CVE entry
 
      - Use the 'OSS/ASF Emails' tab for the emails you should send to oss-security
        and to Apache lists.
@@ -209,9 +210,16 @@
             trunk: 1933340
             2.4.x: 1933341
        ```
-      This can be done manually with  `svn propedit --revprop -r... svn:log`
+
+       This can be done manually with  `svn propedit --revprop -r... svn:log`
+
+       IMPORTANT: You need to save and run the output of `tools/update_svn_logs_with_cve.py`
+       it doesn't run the SVN commands directly.
 
 9. Clean up prior release artifacts
+   
+   This does not always need action.
+
      - https://dist.apache.org/repos/dist/release/httpd (incl CHANGES_2.4.xx)
 
 10. Review the CHANGES and https://httpd.apache.org/security/vulnerabilities_24.html 
@@ -228,6 +236,7 @@
      
      If CHANGES is really bad, consider replacing the various CHANGES files on dist/httpd
      (which is dist/apache.org-dist from your working directory checkout for release scripts)
+
 11. Moderate announcements
     If you are a moderator for announce@httpd.a.o or announce@a.o moderate your own announcement at https://webmod.apache.org/?action=frontpage
     
