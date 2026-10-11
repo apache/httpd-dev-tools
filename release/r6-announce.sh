@@ -114,9 +114,11 @@ done
 
 CVES_MENTIONED=`fgrep CVE- dist/apache.org-dist/release/httpd/CHANGES_${VERSION}`
 if test -n "${CVES_MENTIONED}"; then
+  CVE_COUNT=`echo "${CVES_MENTIONED}" | grep -oE 'CVE-[0-9]+-[0-9]+' | sort -u | wc -l | tr -d ' '`
   cat << EOF
 Then set the following CVEs mentioned to READY on the ASF cveprocess site (and send the emails from the OSS/ASF tab):
 ${CVES_MENTIONED}
+Total CVEs: ${CVE_COUNT}
 EOF
 else
   echo "There seem to be no CVEs mentioned in the CHANGES_${VERSION} file."
