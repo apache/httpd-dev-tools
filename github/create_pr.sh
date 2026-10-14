@@ -29,7 +29,7 @@ TARGET_BRANCH_NAME="2.4.x"
 RESUME=0
 
 if type -P gh > /dev/null ; then
-    if ! gh auth status 2>&1|grep "Logged in to github.com" >/dev/null; then
+    if ! GH_HOST=github.com gh auth status 2>&1|grep "Logged in to github.com" >/dev/null; then
         echo "You need to `gh auth login` before continuing"
         exit 1
     fi
@@ -52,6 +52,13 @@ shift $((OPTIND - 1))
 if [ "$#" -lt 1 ] ; then
     usage
 fi
+
+# Strip a leading 'r' from revisions (e.g. r1234567 -> 1234567)
+REVS=()
+for i in "$@" ; do
+    REVS+=("${i#r}")
+done
+set -- "${REVS[@]}"
 
 if [ -z "$BRANCH_NAME" ] ; then
     BRANCH_NAME=`echo "$@" | tr " " _`
@@ -102,7 +109,7 @@ fi
 git push -u origin $BRANCH_NAME
 MESSAGE=`echo "$@" | sed -e 's/ /, r/g'`
 if type -P gh > /dev/null ; then
-    RESULT=`gh pr create --repo $REPO -B "$TARGET_BRANCH_NAME" -b "Merge r${MESSAGE} from trunk" --title "Merge r${MESSAGE} from trunk"`
+    RESULT=`GH_HOST=github.com gh pr create --repo $REPO -B "$TARGET_BRANCH_NAME" -b "Merge r${MESSAGE} from trunk" --title "Merge r${MESSAGE} from trunk"`
 else
     RESULT=`hub pull-request -b "apache:${TARGET_BRANCH_NAME}" -m "Merge r${MESSAGE} from trunk"`
 fi
