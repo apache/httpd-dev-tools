@@ -25,3 +25,14 @@ These scripts require the following tools (details in the script headers):
   with create_pr.sh.
 
 More details can be found at the top of the scripts.
+
+
+## Overall workflow
+
+1. Do you work in in your httpd git workspace directly and create a PR when ready.
+2. When you are happy with your PR, `apply_trunk_pr.sh` to your trunk SVN checkout and commit it.
+3. Use `create_pr.sh` in your httpd git workspace to create your 2.4.x PR.  Save the generated STATUS entry.
+4. When you are happy with your 2.4.x PR (e.g. CI), add the STATUS entry to 2.4.x SVN.
+5. When approved, use `apply_backport_pr.sh` in your 2.4.x SVN checkout to commit it.
+
+
