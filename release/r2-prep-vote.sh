@@ -40,9 +40,6 @@ source `dirname $0`/env.sh
 detect_checkout
 detect_version $1
 
-SVN_DEST="tags/${FULL_VERSION}-candidate"
-
-
 EXP_DIRNAME="${PROJECT}-${VERSION}"
 EXP_PATH="${DIST_DIR}/${EXP_DIRNAME}"
 # almost the same, except using the full version string
@@ -55,23 +52,16 @@ test -f "${TAR_PATH}.tar.gz" ||
   fail "export tarball ${TAR_PATH}.tar.gz does not exist. Did you run 'make-tars.sh'?"
 
 #Ensure scratch space is in a state we are ready to work with
-AO_DIST_PATH="dist/apache.org-dist"
+AO_DIST_PATH="${DIST_DIR}/apache.org-dist"
 AO_DIST_DEV_PATH="${AO_DIST_PATH}/dev/${PROJECT}"
 AO_DIST_RELEASE_PATH="${AO_DIST_PATH}/release/${PROJECT}"
 
-# SVN repository is huge, carefully check out only what we need
-rm -rf "${AO_DIST_PATH}"
-echo "checking out dist from ${SVN_DIST_URL} ..."
-svn checkout --depth=empty "$SVN_DIST_URL" "${AO_DIST_PATH}" >/dev/null
-echo "checking out ${AO_DIST_DEV_PATH} ..."
-svn update --set-depth immediates --parents "${AO_DIST_DEV_PATH}" >/dev/null
-echo "checking out ${AO_DIST_RELEASE_PATH} ..."
-svn update --set-depth immediates --parents "${AO_DIST_RELEASE_PATH}" >/dev/null
+dist_checkout "${AO_DIST_PATH}" "dev/${PROJECT}" "release/${PROJECT}"
 
 echo "updating CHANGES_${v_major}.${v_minor}.*"
 ##Remove existing version-specific CHANGES files
 if ls "${AO_DIST_DEV_PATH}"/CHANGES_${v_major}.${v_minor}.* >/dev/null 2>&1;then
-  svn rm "${AO_DIST_DEV_PATH}"/CHANGES_${v_major}.${v_minor}.*
+  dist_rm "${AO_DIST_DEV_PATH}"/CHANGES_${v_major}.${v_minor}.*
 fi
 
 ## Generate a new version-specific CHANGES file
@@ -90,16 +80,16 @@ cat "${EXP_PATH}/CHANGES" | perl -e '
     $d=1 if /Changes with Apache '$latest_release'/;
     print if !$d;
   }' > "${AO_DIST_DEV_PATH}/CHANGES_$VERSION"
-svn add "${AO_DIST_DEV_PATH}/CHANGES_$VERSION" >/dev/null
+dist_add "${AO_DIST_DEV_PATH}/CHANGES_$VERSION" >/dev/null
 
 # Place the tarballs and add to changeset, remove any existing
 # tarballs with same major.minor.patch
 echo "adding candidate tars from ${EXP_PATH}*.tar.*"
 if ls "${AO_DIST_DEV_PATH}"/${EXP_DIRNAME}.* >/dev/null 2>&1;then
-  svn rm "${AO_DIST_DEV_PATH}"/${EXP_DIRNAME}.*
+  dist_rm "${AO_DIST_DEV_PATH}"/${EXP_DIRNAME}.*
 fi
 cp "${TAR_PATH}"*.tar.* "${AO_DIST_DEV_PATH}"/
-svn add "${AO_DIST_DEV_PATH}"/${TAR_BASENAME}*.tar.* >/dev/null
+dist_add "${AO_DIST_DEV_PATH}"/${TAR_BASENAME}*.tar.* >/dev/null
 
 echo "updating CHANGES_${v_major}.${v_minor}"
 RELEASE_LINE_CHANGES="${AO_DIST_DEV_PATH}/CHANGES_${v_major}.${v_minor}"
@@ -107,7 +97,7 @@ if test -f "${RELEASE_LINE_CHANGES}";then
   cp "${EXP_PATH}/CHANGES" "${RELEASE_LINE_CHANGES}"
 else
   cp "${EXP_PATH}/CHANGES" "${RELEASE_LINE_CHANGES}"
-  svn add "${RELEASE_LINE_CHANGES}" >/dev/null
+  dist_add "${RELEASE_LINE_CHANGES}" >/dev/null
 fi
 
 echo "updating Announcement${v_major}.${v_minor}.*"
@@ -122,9 +112,10 @@ perl -pi -e "s/^   (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec).*/   $relea
 
 #Push changes up to dev
 echo "changes ready for commit in ${AO_DIST_DEV_PATH}"
-svn stat "${AO_DIST_DEV_PATH}"
-if ask_yes_no "Do you want to commit these?"; then
-  svn commit -m "Add $FULL_VERSION files" "${AO_DIST_DEV_PATH}"
+dist_stat "${AO_DIST_DEV_PATH}"
+note=`local_mode_note " (DIST_MODE=local: nothing is committed to dist.apache.org, the files stay in ${AO_DIST_DEV_PATH})"`
+if ask_yes_no "Do you want to commit these?${note}"; then
+  dist_commit "Add $FULL_VERSION files" "${AO_DIST_DEV_PATH}"
 fi
 
 pushd ${DIST_DIR} > /dev/null
@@ -149,8 +140,7 @@ this candidate tarball ${PROJECT}-${FULL_VERSION} as $VERSION:
 The computed digests of the tarball up for vote are:
 ${TAR_SIGS}
 
-The candidate source is found at <https://svn.apache.org/repos/asf/httpd/httpd/${SVN_DEST}>
-and at <https://github.com/apache/httpd/tree/${FULL_VERSION}-candidate>.
+`scm_candidate_source_text`
 EOF
 echo "An announcement email template has been created at ${DIST_DIR}/mail-vote-$FULL_VERSION.txt"
 cat "${DIST_DIR}/mail-vote-$FULL_VERSION.txt"

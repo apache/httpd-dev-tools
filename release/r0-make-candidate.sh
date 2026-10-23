@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 
-# Create a release candidate for voting in a svn checkout
+# Create a release candidate for voting from a local checkout
 #
-# USAGE: r0-make-candidate.sh [version]
-# EXAMPLE: r0-make-candidate.sh 2.4.49
+# USAGE: r0-make-candidate.sh rcN | version
+# EXAMPLE: r0-make-candidate.sh rc1
+#          r0-make-candidate.sh 2.4.49-rc1
 #
-# This script is called in a built svn checkout of the branch for which
-# a release candidate shall be made:
-# @version       the version identifier, major.minor.patch, to use. If not given
-#                it will determine the version from the local sources
+# This script is called in a built checkout (svn or git, see SCM in env.sh)
+# of the branch for which a release candidate shall be made:
+# @rcN           the candidate suffix; the version comes from the local sources
+# @version       the full version identifier, major.minor.patch(-suffix)
+# The argument is required: a candidate without a suffix (a bare 2.4.49)
+# is only made when asked for explicitly.
 #
 
 #Useful for debugging
@@ -19,11 +22,13 @@ set -e
 
 usage () {
     cat <<EOF 1>&2
-usage: $0 [options] [version]
-  create a release candidate in local SVN checkout.
-  If no version is given, the current version in the checkout is used.
-  Arguments:
-    version        as 'm.n.p(-suffix)?' the version to use.
+usage: $0 [options] rcN|version
+  create a release candidate from the local checkout.
+  Arguments (one is required):
+    rcN            the candidate suffix, e.g. 'rc1'; the version is taken
+                   from the local checkout (include/ap_release.h)
+    version        the full version as 'm.n.p-suffix', or 'm.n.p' to make a
+                   candidate without suffix (asks for confirmation)
   Options:
     -h             print usage information
     -y             never ask, always assume yes
@@ -41,16 +46,28 @@ while getopts "hy" opt; do
 done
 shift $((OPTIND-1))
 
+if test -z "$1"; then
+  echo "ERROR: a candidate suffix (rc1) or full version is required; without one this would create a candidate named like the final release" >&2
+  usage
+fi
+
 source `dirname $0`/common-lib.sh
 source `dirname $0`/env.sh
 
 detect_checkout
+scm_assure_signing_key
 assure_clean_checkout
 assure_no_empty_logno
 detect_version $1
 
-SVN_DEST="tags/${FULL_VERSION}-candidate"
-DEST_DIR="${DIST_DIR}/${FULL_VERSION}-candidate"
+if test -z "${v_suffix}"; then
+  warn "no suffix given: this creates candidate ${FULL_VERSION}, named exactly like the release"
+  if ! ask_yes_no "Do you really want a candidate without an rcN suffix?"; then
+    exit 1
+  fi
+fi
+
+DEST_DIR="${DIST_DIR}/${CANDIDATE_TAG}"
 
 # find out which CVEs are ready and will be reporting in this candidate
 calc_ready_CVE_DIRS "${DIST_DIR}/pmc"
@@ -101,9 +118,10 @@ cat <<EOF
 creating release candidate:
   PROJECT: $PROJECT
   VERSION: $FULL_VERSION
-  URL: $SVN_URL
-  SOURCE: $SVN_SRC@$SVN_REV
-  DEST: $SVN_DEST
+  SCM: $SCM
+  URL: $SRC_URL
+  SOURCE: $SRC_BRANCH@$SRC_REV_SHORT
+  DEST: `scm_candidate_ref`
   LOCAL: $DEST_DIR
 ${CVE_HEADER}
 ${CVE_LIST}
@@ -112,24 +130,24 @@ if ! ask_yes_no "Is this as expected?"; then
   exit 1
 fi
 
-if svn ls "$SVN_BASE/$SVN_DEST" >/dev/null 2>&1; then
-  warn "release candidate tag already exists at $SVN_DEST"
+if scm_ref_exists "$CANDIDATE_TAG" candidate; then
+  warn "release candidate already exists: `scm_describe_candidate`"
   if ! ask_yes_no "Do you want to continue anyway?"; then
     exit 1
   fi
 else
-  echo "creating candidate tag: $SVN_DEST"
-  svn cp -m "Tag $SVN_SRC@$SVN_REV as $FULL_VERSION" "$SVN_BASE/$SVN_SRC@$SVN_REV" "$SVN_BASE/$SVN_DEST"
+  echo "creating candidate: `scm_candidate_ref`"
+  scm_create_candidate
   rm -rf "$DEST_DIR"
 fi
 
 if test ! -d "$DEST_DIR"; then
   mkdir -p `dirname "$DEST_DIR"`
   echo "checkout $DEST_DIR"
-  svn checkout -q "$SVN_BASE/$SVN_DEST" "$DEST_DIR"
+  scm_checkout_candidate "$DEST_DIR"
 else
   echo "updating existing checkout in $DEST_DIR"
-  svn update "$DEST_DIR"
+  scm_update_candidate "$DEST_DIR"
 fi
 
 pushd "$DEST_DIR" >/dev/null
@@ -170,8 +188,7 @@ if test -d docs/manual; then
   echo "rebuilding manuals"
   pushd docs/manual >/dev/null
   #See http://httpd.apache.org/docs-project/docsformat.html for these instructions
-SVN_DOCS_BUILD_URL="https://svn.apache.org/repos/asf/httpd/docs-build"
-
+  # docs-build stays in svn regardless of SCM
   svn checkout "${SVN_DOCS_BUILD_URL}/trunk" build
   pushd build >/dev/null
   ./build.sh all convmap
@@ -185,11 +202,17 @@ fi
 popd >/dev/null
 
 echo "changes for ${PROJECT}-${FULL_VERSION} in ${DEST_DIR}"
-svn stat "${DEST_DIR}"
+scm_status "${DEST_DIR}"
 echo ""
-if ask_yes_no "Do you want to commit these?"; then
-  svn commit -m "Post $FULL_VERSION tag updates" "$DEST_DIR"
-  echo "release candidate sources created in $SVN_DEST"
+if test -n "${CVE_DIRS}"; then
+  note=`local_mode_note " (the candidate commit is pushed to ${SRC_URL}; DIST_MODE=local: the CVE list for pmc stays in ${DIST_DIR}/pmc, not committed)"`
+else
+  note=`local_mode_note " (the candidate commit is pushed to ${SRC_URL})"`
+fi
+if ask_yes_no "Do you want to commit these?${note}"; then
+  scm_commit_candidate "$DEST_DIR" "Post $FULL_VERSION tag updates"
+  echo "release candidate sources created in `scm_describe_candidate`"
+  scm_ci_hint
   save_version
 
   if test -n "${CVE_DIRS}"; then
@@ -201,11 +224,11 @@ if ask_yes_no "Do you want to commit these?"; then
       ln -s ../"${CVE}" "${CVE}"
     done
     popd
-    svn add "${DIST_DIR}/pmc/SECURITY/${PROJECT}-${FULL_VERSION}"
-    
+    pmc_add "${DIST_DIR}/pmc/SECURITY/${PROJECT}-${FULL_VERSION}"
+
     # Format CVE list for commit message
     CVE_COMMIT_LIST=$(echo "${CVE_DIRS}" | tr ' ' '\n' | sed 's/^/  - /')
-    svn commit -m "CVEs included in ${PROJECT}-${FULL_VERSION} (${CVE_COUNT} total):
+    pmc_commit "CVEs included in ${PROJECT}-${FULL_VERSION} (${CVE_COUNT} total):
 ${CVE_COMMIT_LIST}" "${DIST_DIR}/pmc"
   fi
 fi

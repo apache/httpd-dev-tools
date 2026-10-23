@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# Commit staged release changes to various SVN repositories and the
-# project website
+# Commit staged release changes to the dist and pmc SVN repositories,
+# the source repository (svn or git) and the project website
 
 #Useful for debugging
 #set -x
@@ -41,14 +41,13 @@ source `dirname $0`/env.sh
 detect_checkout
 detect_version $1
 
-AO_DIST_PATH="dist/apache.org-dist"
+AO_DIST_PATH="${DIST_DIR}/apache.org-dist"
 AO_DIST_RELEASE_PATH="${AO_DIST_PATH}/release/${PROJECT}"
 
-SVN_SITE_CONTENT_URL="${SVN_SITE_URL}/${PROJECT}/site/trunk/content/"
 DIST_SITEPATH="${DIST_DIR}/site"
 
 echo "updating local checkout"
-svn up
+scm_update_checkout
 
 test -d "${AO_DIST_RELEASE_PATH}" ||
   fail "staged changes for dist.apache.org not found in ${AO_DIST_RELEASE_PATH}"
@@ -60,32 +59,47 @@ test -d "${DIST_SITEPATH}" ||
 echo
 echo "PENDING REPOSITORY CHANGES"
 echo "--------"
-echo "SVN changes staged for ${SVN_DIST_URL}"
-svn stat "${AO_DIST_PATH}"
+echo "changes staged for ${SVN_DIST_URL} (DIST_MODE=${DIST_MODE})"
+dist_stat "${AO_DIST_PATH}"
 echo "--------"
-echo "SVN changes staged in pmc/${PROJECT}"
-svn stat "${DIST_DIR}/pmc"
+echo "changes staged in pmc/${PROJECT} (DIST_MODE=${DIST_MODE})"
+pmc_stat "${DIST_DIR}/pmc"
 echo "--------"
 echo "git changes staged in ${DIST_SITEPATH}"
 (cd "${DIST_SITEPATH}" && git status)
 echo "--------"
-echo "SVN changes staged in local checkout for ${SVN_URL}"
-svn stat
+echo "${SCM} changes staged in local checkout for ${SRC_URL}"
+scm_status .
 
-if ask_yes_no "Do you want to commit these changes?"; then
-  echo "WARNING: this is quite irreversible!"
-  if ask_yes_no "Do you REALLY want to commit these changes?"; then
+if dist_mode_is_local; then
+  cat <<EOF
+DIST_MODE=local: of the changes above,
+  - dist.apache.org and pmc stay local (nothing is committed there)
+  - the site commit is made in ${DIST_SITEPATH} but not pushed
+  - the source checkout commit IS pushed to ${SRC_URL}
+EOF
+fi
+note=`local_mode_note " (DIST_MODE=local: only the source commit leaves this machine)"`
+if ask_yes_no "Do you want to commit these changes?${note}"; then
+  if dist_mode_is_local; then
+    echo "WARNING: the source commit to ${SRC_URL} is irreversible; the rest stays local."
+  else
+    echo "WARNING: this is quite irreversible!"
+  fi
+  if ask_yes_no "Do you REALLY want to commit these changes?${note}"; then
     MSG="publishing release ${PROJECT}-${VERSION}"
 
-    # echo nop: svn commit -m "${MSG}" "${DIST_DIR}/pmc"
-    svn commit -m "${MSG}" "${DIST_DIR}/pmc"
+    pmc_commit "${MSG}" "${DIST_DIR}/pmc"
     # dev is included: r4 moved the CHANGES files from dev to release
-    # echo nop: svn commit -m "${MSG}" "${AO_DIST_PATH}"
-    svn commit -m "${MSG}" "${AO_DIST_PATH}"
-    # echo nop: svn commit -m "${MSG}" .
-    svn commit -m "${MSG}" .
-    # echo "nop: cd ${DIST_SITEPATH}; git commit -m ${MSG}"
-    (cd "${DIST_SITEPATH}" && git commit -m "${MSG}" && git push)
+    dist_commit "${MSG}" "${AO_DIST_PATH}"
+    # the source checkout: svn commit, or git commit + push to GIT_SRC_URL
+    scm_commit_checkout "${MSG}"
+    if dist_mode_is_local; then
+      (cd "${DIST_SITEPATH}" && git commit -m "${MSG}")
+      echo "DIST_MODE=local: not pushing ${DIST_SITEPATH} to ${GIT_SITE_URL}"
+    else
+      (cd "${DIST_SITEPATH}" && git commit -m "${MSG}" && git push)
+    fi
 
     # success exit
     save_version

@@ -43,16 +43,13 @@ source `dirname $0`/env.sh
 detect_checkout
 detect_version $1
 
-SVN_DEST="tags/${FULL_VERSION}-candidate"
-SVN_RELEASE="tags/${VERSION}"
-
 echo "You are about to remove any intermediary files for ${PROJECT}-${FULL_VERSION}"
 if ! ask_yes_no "Is this what you want?"; then
   exit 1
 fi
 
-if svn ls "$SVN_BASE/$SVN_RELEASE" >/dev/null 2>&1 ; then
-  fail "release already tagged at $SVN_RELEASE"
+if scm_ref_exists "$RELEASE_TAG" release; then
+  fail "release already tagged as ${RELEASE_TAG} in ${SRC_URL}"
 else
   echo "OK: $VERSION has not been tagged as release yet."
 fi
@@ -61,18 +58,11 @@ fi
 VOTE_FILE="${PROJECT}-${FULL_VERSION}"
 RELEASE_FILE="${PROJECT}-${VERSION}"
 
-AO_DIST_PATH="dist/apache.org-dist"
+AO_DIST_PATH="${DIST_DIR}/apache.org-dist"
 AO_DIST_DEV_PATH="${AO_DIST_PATH}/dev/${PROJECT}"
 AO_DIST_RELEASE_PATH="${AO_DIST_PATH}/release/${PROJECT}"
 
-# SVN repository is huge, carefully check out only what we need
-rm -rf "${AO_DIST_PATH}"
-echo "checking out dist from ${SVN_DIST_URL} ..."
-svn checkout --depth=empty "$SVN_DIST_URL" "${AO_DIST_PATH}" >/dev/null
-echo "checking out ${AO_DIST_DEV_PATH} ..."
-svn update --set-depth immediates --parents "${AO_DIST_DEV_PATH}" >/dev/null
-echo "checking out ${AO_DIST_RELEASE_PATH} ..."
-svn update --set-depth immediates --parents "${AO_DIST_RELEASE_PATH}" >/dev/null
+dist_checkout "${AO_DIST_PATH}" "dev/${PROJECT}" "release/${PROJECT}"
 
 # has this been released already?
 if ls "${AO_DIST_RELEASE_PATH}/${RELEASE_FILE}".* >/dev/null 2>&1;then
@@ -84,18 +74,20 @@ fi
 
 if ls "${AO_DIST_DEV_PATH}/${VOTE_FILE}".* >/dev/null 2>&1;then
   echo "removing candidate tarballs in ${AO_DIST_DEV_PATH}"
-  svn rm --force "${AO_DIST_DEV_PATH}/${VOTE_FILE}".*
+  dist_rm --force "${AO_DIST_DEV_PATH}/${VOTE_FILE}".*
 fi
 if ls "${AO_DIST_DEV_PATH}/CHANGES_${v_major}.${v_minor}"* >/dev/null 2>&1;then
   echo "removing CHANGES in ${AO_DIST_DEV_PATH}"
-  svn rm --force "${AO_DIST_DEV_PATH}/CHANGES_${v_major}.${v_minor}"*
+  dist_rm --force "${AO_DIST_DEV_PATH}/CHANGES_${v_major}.${v_minor}"*
 fi
 
-out=`svn stat "${AO_DIST_PATH}" 2>&1 >/dev/null`
+out=`dist_stat "${AO_DIST_PATH}"`
 if test -n "$out"; then
-  svn stat "${AO_DIST_PATH}"
-  if ask_yes_no "Do you want to commit these?"; then
-    svn commit -m "resetting candidate $FULL_VERSION" "${AO_DIST_PATH}"
+  echo "$out"
+  if dist_mode_is_local; then
+    echo "DIST_MODE=local: not committing ${AO_DIST_PATH}"
+  elif ask_yes_no "Do you want to commit these?"; then
+    dist_commit "resetting candidate $FULL_VERSION" "${AO_DIST_PATH}"
   else
     exit 1
   fi
@@ -103,11 +95,11 @@ else
   echo "OK: no vote tarballs at dist.apache.org found."
 fi
 
-if svn ls "$SVN_BASE/$SVN_DEST" >/dev/null 2>&1 ; then
-  echo "removing subversion $SVN_DEST"
-  svn rm -m "resetting candidate $FULL_VERSION" "$SVN_BASE/$SVN_DEST"
+if scm_ref_exists "$CANDIDATE_TAG" candidate; then
+  echo "removing `scm_candidate_ref`"
+  scm_delete_candidate "resetting candidate $FULL_VERSION"
 else
-  echo "OK: no subversion tag exists at $SVN_DEST."
+  echo "OK: no candidate exists as `scm_candidate_ref`."
 fi
 
 if test -d "$DIST_DIR"; then

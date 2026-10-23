@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# Create the release tars from a svn candidate tag
+# Create the release tars from a release candidate
 #
 # USAGE: r1-make-tars.sh [version]
 # EXAMPLE: r1-make-tars.sh 2.4.49
 #
-# Create the tar files for a release candidate svn tag
+# Create the tar files for a release candidate (svn tag or git branch)
 # @version       the version identifier, major.minor.patch, to use. If not given
 #                it will determine the version from the local sources
 
@@ -18,9 +18,9 @@ set -e
 usage () {
     cat <<EOF 1>&2
 usage: $0 [options] [version]
-  create the release tars from a SVN candidate. The candidate is expected
-  to be found in SVN at 'tags/$version-candidate', as prepared by the
-  'make-candidate.sh' script.
+  create the release tars from a release candidate. The candidate is
+  expected to exist as svn tag or git branch '$version-candidate', as
+  prepared by the 'r0-make-candidate.sh' script.
   If no version is given, the current version in the checkout is used.
   Arguments:
     version        as 'm.n.p(-suffix)?', the version to use.
@@ -48,13 +48,11 @@ source `dirname $0`/env.sh
 detect_checkout
 detect_version $1
 
-SVN_DEST="tags/${FULL_VERSION}-candidate"
-
 cat <<EOF
 creating release tars:
   PROJECT: $PROJECT
   VERSION: $FULL_VERSION
-  CANDIDATE: $SVN_BASE/$SVN_DEST
+  CANDIDATE: `scm_describe_candidate`
   LOCAL: $DIST_DIR
 EOF
 
@@ -64,8 +62,8 @@ EXP_PATH="${DIST_DIR}/${EXP_DIRNAME}"
 TAR_BASENAME="${PROJECT}-${FULL_VERSION}"
 TAR_PATH="${DIST_DIR}/${TAR_BASENAME}"
 
-svn ls "$SVN_BASE/$SVN_DEST" >/dev/null 2>&1 ||
-  fail "release candidate does not exist in SVN: $SVN_DEST"
+scm_ref_exists "$CANDIDATE_TAG" candidate ||
+  fail "release candidate does not exist: `scm_candidate_ref`"
 
 test -d "$DIST_DIR" || mkdir -p "$DIST_DIR"
 
@@ -73,8 +71,8 @@ echo "purging any previous leftovers related to $EXP_PATH"
 rm -rf "${EXP_PATH}"
 rm -f "${DIST_DIR}/${EXP_DIRNAME}"*.tar.*
 
-echo "exporting $SVN_DEST to $EXP_PATH"
-svn export "$SVN_BASE/$SVN_DEST" "${EXP_PATH}" > /dev/null
+echo "exporting `scm_candidate_ref` to $EXP_PATH"
+scm_export "$CANDIDATE_TAG" "${EXP_PATH}"
 
 build_checksums=1    # create checksum files for tarballs
 

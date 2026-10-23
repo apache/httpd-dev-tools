@@ -4,6 +4,8 @@
 
 1. make sure `jq` is in your path
 2. have a checkout of https://svn.apache.org/repos/asf/httpd/dev-tools and set environment variable $DEV_TOOLS in the environment
+3. have a checkout of the httpd branch to release: a svn working copy or a
+   git clone.
 
 ## preflight checks
 
@@ -52,7 +54,9 @@
 
    Review the output, including picking up any ready CVEs (based on tools/readiness.sh output)
 
-   Monitor the CI run for the tag getting pushed: https://github.com/apache/httpd/actions
+   Monitor the CI run for the tag (svn) or candidate branch (git) getting
+   pushed: https://github.com/apache/httpd/actions. In git mode the script
+   prints the matching `gh run list` / `gh run watch` commands.
 
 4. Prepare the tarballs: 
 
@@ -86,7 +90,10 @@
    `$DEV_TOOLS/release/r3-push-release-tars.sh`
 
     - tars are moved to https://dist.apache.org/repos/dist/release/httpd/
-    - the SVN tags/$FULL_VERSION-candidate is moved to tags/$VERSION
+    - svn: tags/$FULL_VERSION-candidate is moved to tags/$VERSION.
+      git: the candidate branch's commit is tagged $VERSION (annotated,
+      signed unless GIT_SIGN_TAGS=0) and the branch $FULL_VERSION-candidate
+      is deleted.
     - CHANGES_$VERSION and CHANGES_2.4 stay in dist/dev until r4, so they
       are never published without the CVE information.
 
@@ -131,11 +138,12 @@
       -  update ./CHANGES ./STATUS ./include/ap_release.h
       - checks out and modifies project website
 
-      To verify, just `svn diff` with a focus on e.g. CHANGES for CVE handling.
+      To verify, just `svn diff` (git: `git diff`) with a focus on e.g. CHANGES for CVE handling.
       It is likely you will want to cleanup the SECURITY changes entries folded into STATUS
       because they often have unusual formatting and some redundant info.
 
-      If the docs/ changes are all total noise, consider svn `revert -R docs`
+      If the docs/ changes are all total noise, consider `svn revert -R docs`
+      (git: `git checkout -- docs`)
 
 4. Up until this point, everything can be reverted with:
 
@@ -248,7 +256,8 @@
 
 ## Misc notes
 The local checkout:
- - same as you otherwise use, e.g. of ^/httpd/httpd/branches/2.4.x
+ - same as you otherwise use, e.g. of ^/httpd/httpd/branches/2.4.x, or in
+   git mode a clone of https://github.com/apache/httpd with 2.4.x checked out
  - make sure that it builds and passes the tests for you
  - make-candidate.sh checks if "changes-entries" is empty. Do
    > make update-changes
@@ -271,23 +280,26 @@ Handling of VERSIONs:
    your local checkout (httpd: include/ap_release.h).
 
 What r0-make-candidate.sh does:
- - copies the current REVISION of your checkout to ^/httpd/httpd/tags/$VERSION-candidate
+ - svn: copies the current REVISION of your checkout to ^/httpd/httpd/tags/$VERSION-candidate
+   git: pushes the current commit of your checkout to the server as branch
+   $VERSION-candidate (no local branch is created)
  - Patches the $VERSION everywhere in the sources where needed
  - Rebuilds the docs/manual, so the version and current year is properly reflected there
- - svn commits this to tags/$VERSION-candidate
+ - commits this to the candidate ("Post $VERSION tag updates"); git: and pushes it
  NOTE:
- - it works on a checkout it creates locally in dist/$VERSION-candidate, it
-   does not modify the checkout you run this in. Once the tag is created, any
-   further modifications of your local checkout won't affect it.
+ - it works on a checkout it creates locally in dist/$VERSION-candidate (svn
+   checkout or shallow git clone of the candidate), it does not modify the
+   checkout you run this in. Once the candidate is created, any further
+   modifications of your local checkout won't affect it.
  - Say, you have not called a vote yet and someone comes with a late, important
    commit to the branch, you should:
-   * remove ^/httpd/httpd/tags/$VERSION-candidate in SVN
-   * remove the dist directory
-   * svn update your local checkout
-   * run make-candidate.sh again
+   * run reset-candidate.sh (removes the candidate tag/branch and the dist directory)
+   * svn update / git pull your local checkout
+   * run r0-make-candidate.sh again
 
 What r1-make-tars.sh does:
- - svn exports the candidate from ^/httpd/httpd/tags/$VERSION-candidate
+ - exports the candidate (svn export of ^/httpd/httpd/tags/$VERSION-candidate,
+   or git archive of the candidate branch as fetched from the server)
    into dist/httpd-$VERSION
  - retrieves the latest APR/APU sources and adds them to dist/httpd-$VERSION/srclib
  - runs "buildconf" on the export
@@ -318,7 +330,10 @@ What r3-push-release-tars.sh does:
  - It leaves CHANGES_$VERSION and CHANGES_$v_major.$v_minor in /dev; r4
    moves them once the CVE information is added. Anything published to
    /release can be cached by the CDN (dlcdn.apache.org) for a long time.
- - It moves SVN tags/$FULL_VERSION-candidate tag to tags/$VERSION
+ - svn: It moves SVN tags/$FULL_VERSION-candidate tag to tags/$VERSION
+   git: It creates the annotated tag $VERSION on the candidate branch's
+   commit, pushes it and deletes the candidate branch. Tags are never
+   deleted or moved; rerunning r3 fails on the existing tag.
  - NO security related information is added yet.
 
 What r4-stage-release.sh does:
@@ -341,6 +356,18 @@ What r5-commit-staged-release.sh does:
  - It commits the changes made in the previous step in your local
    file system to the Apache repositories and website. This makes
    the SECURITY information publicly available via the release/CHANGES* files.
+ - git: the local checkout is fast-forwarded first (`git pull --ff-only
+   --autostash`); if the branch moved under the staged edits in a way that
+   cannot fast-forward, the script stops and tells you to resolve it by
+   hand. The commit is then pushed to GIT_SRC_URL.
+
+What reset-candidate.sh does:
+ - refuses if the release tag already exists
+ - removes the candidate tarballs and CHANGES files from dist/dev
+ - svn: removes tags/$FULL_VERSION-candidate
+   git: deletes the candidate branch on the server (nothing else was touched:
+   no tag was created and your branch was not modified)
+ - removes the local dist directory
 
 What r6-announce.sh does:
  - It checks that CHANGES_$VERSION and CHANGES_$v_major.$v_minor on

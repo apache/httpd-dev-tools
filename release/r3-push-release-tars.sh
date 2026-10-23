@@ -40,13 +40,11 @@ source `dirname $0`/common-lib.sh
 source `dirname $0`/env.sh
 
 detect_checkout
+scm_assure_signing_key
 detect_version $1
 
-SVN_DEST="tags/${FULL_VERSION}-candidate"
-SVN_RELEASE="tags/${VERSION}"
-
-svn ls "$SVN_BASE/$SVN_DEST" >/dev/null 2>&1 ||
-  fail "release candidate does not exist in SVN: $SVN_DEST"
+scm_ref_exists "$CANDIDATE_TAG" candidate ||
+  fail "release candidate does not exist: `scm_candidate_ref`"
 
 EXP_DIRNAME="${PROJECT}-${VERSION}"
 EXP_PATH="${DIST_DIR}/${EXP_DIRNAME}"
@@ -55,18 +53,11 @@ TAR_BASENAME="${PROJECT}-${FULL_VERSION}"
 TAR_PATH="${DIST_DIR}/${TAR_BASENAME}"
 
 #Ensure scratch space is in a state we are ready to work with
-AO_DIST_PATH="dist/apache.org-dist"
+AO_DIST_PATH="${DIST_DIR}/apache.org-dist"
 AO_DIST_DEV_PATH="${AO_DIST_PATH}/dev/${PROJECT}"
 AO_DIST_RELEASE_PATH="${AO_DIST_PATH}/release/${PROJECT}"
 
-# SVN repository is huge, carefully check out only what we need
-rm -rf "${AO_DIST_PATH}"
-echo "checking out dist from ${SVN_DIST_URL} ..."
-svn checkout --depth=empty "$SVN_DIST_URL" "${AO_DIST_PATH}" >/dev/null
-echo "checking out ${AO_DIST_DEV_PATH} ..."
-svn update --set-depth immediates --parents "${AO_DIST_DEV_PATH}" >/dev/null
-echo "checking out ${AO_DIST_RELEASE_PATH} ..."
-svn update --set-depth immediates --parents "${AO_DIST_RELEASE_PATH}" >/dev/null
+dist_checkout "${AO_DIST_PATH}" "dev/${PROJECT}" "release/${PROJECT}"
 
 echo "updating Announcement files ..."
 #Likely a duplicate of what we did above, but be safe... force version number in announcements
@@ -78,13 +69,13 @@ perl -pi -e "s/^   (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec).*/   $relea
 
 echo "moving voted tars ${AO_DIST_DEV_PATH}/${PROJECT}-${FULL_VERSION}.tar.*"
 #Do an SVN move of the files to retain history
-svn mv "${AO_DIST_DEV_PATH}/${PROJECT}-${FULL_VERSION}".tar.* "${AO_DIST_RELEASE_PATH}"/
+dist_mv "${AO_DIST_DEV_PATH}/${PROJECT}-${FULL_VERSION}".tar.* "${AO_DIST_RELEASE_PATH}"/
 if test "${VERSION}" != "${FULL_VERSION}"; then
   # releasing a version with a suffix, e.g. -rc1. rename to just version
   echo "renaming ${FULL_VERSION} files to ${VERSION}"
   for file in "${AO_DIST_RELEASE_PATH}/${PROJECT}-${FULL_VERSION}".tar.*; do
     dest=`echo $file | sed -e "s/${FULL_VERSION}/${VERSION}/"`
-    svn mv "$file" "$dest"
+    dist_mv "$file" "$dest"
   done
   # fix the filenames in the hash files (PR65665)
   echo "fixing ${FULL_VERSION} filename to ${VERSION} in hash files"
@@ -98,7 +89,7 @@ fi
 
 # remove dependency tars from dev
 if ls "${AO_DIST_DEV_PATH}/httpd-${FULL_VERSION}-deps".tar.* >/dev/null 2>&1;then
-  svn rm --force "${AO_DIST_DEV_PATH}/httpd-${FULL_VERSION}-deps".tar.*
+  dist_rm --force "${AO_DIST_DEV_PATH}/httpd-${FULL_VERSION}-deps".tar.*
 fi
 
 #Note we don't delete the Announce files since it is our template
@@ -106,15 +97,19 @@ fi
 echo ""
 echo "changes ready for commit in: ${AO_DIST_PATH}"
 echo "----------------------------"
-svn stat "${AO_DIST_PATH}"
-if ask_yes_no "Do you want to commit these?"; then
-  svn commit -m "Add release $PROJECT-$VERSION from voted $FULL_VERSION" "${AO_DIST_PATH}"
+dist_stat "${AO_DIST_PATH}"
+if dist_mode_is_local; then
+  echo "DIST_MODE=local: not committing ${AO_DIST_PATH}"
+elif ask_yes_no "Do you want to commit these?"; then
+  dist_commit "Add release $PROJECT-$VERSION from voted $FULL_VERSION" "${AO_DIST_PATH}"
 else
   exit 1
 fi
 
-# As a last step, move the candidate tag to the release tag
-svn mv -m "release $VERSION from voted $FULL_VERSION" \
-  "$SVN_BASE/$SVN_DEST" "$SVN_BASE/$SVN_RELEASE"
+# As a last step, turn the candidate into the release
+# (svn: move tags/X-candidate to tags/X; git: tag the candidate branch's
+# commit as X and delete the branch)
+echo "promoting `scm_candidate_ref` to release ${RELEASE_TAG}"
+scm_promote_candidate "release $VERSION from voted $FULL_VERSION"
 
 save_version

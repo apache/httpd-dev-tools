@@ -65,12 +65,10 @@ assure_clean_checkout
 
 detect_version $1
 
-SVN_RELEASE="tags/${VERSION}"
+scm_ref_exists "$RELEASE_TAG" release ||
+  fail_not_dry "release ${RELEASE_TAG} does not exist in ${SRC_URL}"
 
-svn ls "$SVN_BASE/$SVN_RELEASE" >/dev/null 2>&1 ||
-  fail_not_dry "release does not exist in SVN: $SVN_RELEASE"
-
-AO_DIST_PATH="dist/apache.org-dist"
+AO_DIST_PATH="${DIST_DIR}/apache.org-dist"
 AO_DIST_DEV_PATH="${AO_DIST_PATH}/dev/${PROJECT}"
 AO_DIST_RELEASE_PATH="${AO_DIST_PATH}/release/${PROJECT}"
 
@@ -78,26 +76,19 @@ DIST_SITEPATH="${DIST_DIR}/site"
 
 TAR_BASENAME="${PROJECT}-${VERSION}"
 
-# SVN repository is huge, carefully check out only what we need
-rm -rf "${AO_DIST_PATH}"
-echo "checking out dist from ${SVN_DIST_URL} ..."
-svn checkout --depth=empty "$SVN_DIST_URL" "${AO_DIST_PATH}" >/dev/null
-echo "checking out ${AO_DIST_RELEASE_PATH} ..."
-svn update --set-depth immediates --parents "${AO_DIST_RELEASE_PATH}" >/dev/null
-echo "checking out ${AO_DIST_DEV_PATH} ..."
-svn update --set-depth immediates --parents "${AO_DIST_DEV_PATH}" >/dev/null
+dist_checkout "${AO_DIST_PATH}" "release/${PROJECT}" "dev/${PROJECT}"
 
 # r3-push-release-tars.sh leaves the CHANGES files in dev, so that they are
 # published in release only together with the CVE information added below.
 if test -f "${AO_DIST_DEV_PATH}/CHANGES_${VERSION}"; then
   echo "moving ${AO_DIST_DEV_PATH}/CHANGES_${VERSION} to release"
-  svn mv "${AO_DIST_DEV_PATH}/CHANGES_${VERSION}" "${AO_DIST_RELEASE_PATH}"/ >/dev/null
+  dist_mv "${AO_DIST_DEV_PATH}/CHANGES_${VERSION}" "${AO_DIST_RELEASE_PATH}"/ >/dev/null
 fi
 if test -f "${AO_DIST_DEV_PATH}/CHANGES_${v_major}.${v_minor}"; then
   echo "copying ${AO_DIST_DEV_PATH}/CHANGES_${v_major}.${v_minor} to release"
   #We cannot move since these exist in the destination
   cp "${AO_DIST_DEV_PATH}/CHANGES_${v_major}.${v_minor}" "${AO_DIST_RELEASE_PATH}"/
-  svn rm --force "${AO_DIST_DEV_PATH}/CHANGES_${v_major}.${v_minor}" >/dev/null
+  dist_rm --force "${AO_DIST_DEV_PATH}/CHANGES_${v_major}.${v_minor}" >/dev/null
 fi
 
 if ! ls "${AO_DIST_RELEASE_PATH}/${TAR_BASENAME}".tar.* >/dev/null 2>&1; then
@@ -138,9 +129,9 @@ fi
 
 
 # Update the latest version pointer
-svn rm --force "${AO_DIST_RELEASE_PATH}/CURRENT-IS-${v_major}.${v_minor}"* >/dev/null
+dist_rm --force "${AO_DIST_RELEASE_PATH}/CURRENT-IS-${v_major}.${v_minor}"* >/dev/null
 touch "${AO_DIST_RELEASE_PATH}/CURRENT-IS-${VERSION}"
-svn add "${AO_DIST_RELEASE_PATH}/CURRENT-IS-${VERSION}" >/dev/null
+dist_add "${AO_DIST_RELEASE_PATH}/CURRENT-IS-${VERSION}" >/dev/null
 
 # we should only keep one release in our dist repository,
 # remove the previous one if it exists
@@ -148,7 +139,7 @@ prev_patch=`expr ${v_patch} - 1`
 PREV_VERSION="${v_major}.${v_minor}.${prev_patch}"
 for i in "${AO_DIST_RELEASE_PATH}/${PROJECT}-${PREV_VERSION}".tar.* \
          "${AO_DIST_RELEASE_PATH}/CHANGES_${v_major}.${v_minor}.${prev_patch}"; do
-  test -f "$i" && svn rm "$i"
+  test -f "$i" && dist_rm "$i"
 done
 
 
@@ -212,10 +203,10 @@ echo "adding site changes"
 if test -n "${CVE_DIRS}"; then
   echo "moving CVEs to pmc/resolved ..."
   for CVE in $CVE_DIRS; do
-    svn mv "${DIST_DIR}/pmc/SECURITY/${CVE}" "${DIST_DIR}/pmc/resolved/" >/dev/null
+    pmc_mv "${DIST_DIR}/pmc/SECURITY/${CVE}" "${DIST_DIR}/pmc/resolved/" >/dev/null
   done
   if test -d "${DIST_DIR}/pmc/SECURITY/${PROJECT}-${FULL_VERSION}"; then
-    svn rm "${DIST_DIR}/pmc/SECURITY/${PROJECT}-${FULL_VERSION}"
+    pmc_rm "${DIST_DIR}/pmc/SECURITY/${PROJECT}-${FULL_VERSION}"
   fi
 fi
 
@@ -227,16 +218,16 @@ stage_checkout_release
 echo
 echo "PENDING REPOSITORY CHANGES"
 echo "--------"
-echo "SVN changes staged for ${SVN_DIST_URL}"
-svn stat "${AO_DIST_PATH}"
+echo "changes staged for ${SVN_DIST_URL} (DIST_MODE=${DIST_MODE})"
+dist_stat "${AO_DIST_PATH}"
 echo "--------"
-echo "SVN changes staged in pmc/${PROJECT}"
-svn stat "${DIST_DIR}/pmc"
+echo "changes staged in pmc/${PROJECT} (DIST_MODE=${DIST_MODE})"
+pmc_stat "${DIST_DIR}/pmc"
 echo "--------"
 echo "git changes staged in ${DIST_SITEPATH}"
 (cd "${DIST_SITEPATH}" && git status)
 echo "--------"
-echo "SVN changes staged in local checkout for ${SVN_URL}"
-svn stat
+echo "${SCM} changes staged in local checkout for ${SRC_URL}"
+scm_status .
 
 save_version

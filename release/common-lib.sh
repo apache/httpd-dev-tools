@@ -3,6 +3,13 @@
 #Make sure English is used when formating dates and other things
 export LANG=en_US.UTF-8
 
+RELEASE_TOOLS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# backends for the source repository, selected by $SCM (env.sh)
+source "${RELEASE_TOOLS_DIR}/scm-svn.sh"
+source "${RELEASE_TOOLS_DIR}/scm-git.sh"
+# wrappers around the dist.apache.org and pmc svn checkouts, see $DIST_MODE
+source "${RELEASE_TOOLS_DIR}/dist-lib.sh"
+
 
 fail() {
   if test -n "$*"; then
@@ -27,6 +34,7 @@ is_int() {
 
 ask_yes_no() {
   if test "${ALWAYS_YES}" = 1; then
+    echo "$* [auto yes]"
     return 0
   fi
   read -r -p "$* [y/N] " response
@@ -50,39 +58,99 @@ assure_commands() {
   if test "$ok" != 1; then
     fail "please install the missing components."
   fi
+  scm_assure_commands
 }
 
-# Inspect the local directory and populate
-# SVN_URL   the absolute url of the local checkout
-# SVN_BASE  the base url of the project
-# SVN_SRC   the path relative of SVN_BASE of the checkout
-# SVN_REV   the revision of the checkout
-detect_checkout() {
-  out=`svn stat 2>&1 >/dev/null`
-  test -z "$out" || fail "local directory does not seem to be a SVN checkout.\n$out"
-  SVN_URL=`svn info --show-item url` || fail "unable to determine SVN url"
-  test -n "$SVN_URL" || fail "unable to determine SVN url"
-  case "$SVN_URL" in
-    */trunk)
-      SVN_BASE=`echo $SVN_URL | sed -e 's,/trunk,,'`
-      SVN_SRC=trunk
-      ;;
-    */branches/*)
-      SVN_BASE=`echo $SVN_URL | sed -e 's,/branches/.*,,'`
-      SVN_SRC=`echo $SVN_URL | sed -e 's,.*/branches/,branches/,'`
-      ;;
-    *)
-      fail "unable to detect path in $SVN_URL"
-      ;;
+########################################
+# Source repository abstraction.
+#
+# Every operation on the httpd source repository goes through one of the
+# scm_* functions below, which dispatch at call time to scm_svn_* or
+# scm_git_* depending on $SCM (set in env.sh, sourced after this file).
+#
+# Neutral variables populated by scm_detect_checkout:
+#   SRC_URL        where the checkout comes from
+#   SRC_BRANCH     'trunk' / 'branches/2.4.x' (svn) or 'trunk' / '2.4.x' (git)
+#   SRC_REV        revision number (svn) or commit sha (git)
+#   SRC_REV_SHORT  the same, abbreviated for messages
+#   PROJECT        project name, e.g. 'httpd'
+# and by detect_version:
+#   CANDIDATE_TAG  ${FULL_VERSION}-candidate (svn: tags/, git: a branch)
+#   RELEASE_TAG    ${VERSION}                (svn: tags/, git: a tag)
+# The svn backend keeps setting SVN_URL, SVN_BASE, SVN_SRC and SVN_REV.
+
+# print 'svn' or 'git' depending on the kind of checkout the current
+# directory is. The scripts always run from the top of the checkout, where
+# svn keeps .svn and git keeps .git (a file for worktrees). Prints nothing
+# and returns non-zero when neither or both are present.
+scm_detect_type() {
+  if test -d .svn -a -e .git; then
+    return 2
+  elif test -d .svn; then
+    echo svn
+  elif test -e .git; then
+    echo git
+  else
+    return 1
+  fi
+}
+
+scm_validate() {
+  if test -z "${SCM}"; then
+    # detection in env.sh found nothing usable; say why
+    if test -d .svn -a -e .git; then
+      fail "current directory is both a svn and a git checkout; set SCM=svn or SCM=git explicitly"
+    fi
+    fail "current directory is neither a svn checkout (.svn) nor a git work tree (.git); run from the top of the checkout"
+  fi
+  case "${SCM}" in
+    svn|git) ;;
+    *) fail "SCM must be 'svn' or 'git', not '${SCM}'" ;;
   esac
-  SVN_REV=`svn info --show-item revision` || fail "unable to determine SVN revision"
-  test -n "$SVN_REV" || fail "unable to determine SVN revision"
-  PROJECT=`basename $SVN_BASE`
+  "scm_${SCM}_validate" "$@"
+}
+scm_assure_commands()       { "scm_${SCM}_assure_commands" "$@"; }
+scm_detect_checkout()       { "scm_${SCM}_detect_checkout" "$@"; }
+scm_assure_clean_checkout() { "scm_${SCM}_assure_clean_checkout" "$@"; }
+scm_assure_signing_key()    { "scm_${SCM}_assure_signing_key" "$@"; }
+scm_ref_exists()            { "scm_${SCM}_ref_exists" "$@"; }
+scm_candidate_ref()         { "scm_${SCM}_candidate_ref" "$@"; }
+scm_describe_candidate()    { "scm_${SCM}_describe_candidate" "$@"; }
+scm_create_candidate()      { "scm_${SCM}_create_candidate" "$@"; }
+scm_checkout_candidate()    { "scm_${SCM}_checkout_candidate" "$@"; }
+scm_update_candidate()      { "scm_${SCM}_update_candidate" "$@"; }
+scm_status()                { "scm_${SCM}_status" "$@"; }
+scm_commit_candidate()      { "scm_${SCM}_commit_candidate" "$@"; }
+scm_ci_hint()               { "scm_${SCM}_ci_hint" "$@"; }
+scm_export()                { "scm_${SCM}_export" "$@"; }
+scm_promote_candidate()     { "scm_${SCM}_promote_candidate" "$@"; }
+scm_delete_candidate()      { "scm_${SCM}_delete_candidate" "$@"; }
+scm_update_checkout()       { "scm_${SCM}_update_checkout" "$@"; }
+scm_commit_checkout()       { "scm_${SCM}_commit_checkout" "$@"; }
+scm_candidate_source_text() { "scm_${SCM}_candidate_source_text" "$@"; }
+
+# Inspect the local directory and populate the SRC_* variables (see above)
+detect_checkout() {
+  scm_validate
+  dist_validate
+  dist_banner
+  scm_detect_checkout
+  assure_release_branch
+}
+
+# the checkout must be on one of RELEASE_BRANCHES (env.sh)
+assure_release_branch() {
+  short="${SRC_BRANCH#branches/}"
+  for b in ${RELEASE_BRANCHES}; do
+    if test "$short" = "$b"; then
+      return 0
+    fi
+  done
+  fail "checkout is on '${SRC_BRANCH}', releases are only cut from: ${RELEASE_BRANCHES} (RELEASE_BRANCHES in env.sh)"
 }
 
 assure_clean_checkout() {
-  out=`svn stat`
-  test -z "$out" || fail "local checkout is not clean.\n$out"
+  scm_assure_clean_checkout
 }
 
 assure_no_empty_logno() {
@@ -112,7 +180,12 @@ detect_version() {
   if test -z "$version"; then
     # did we record it already?
     if test -f "${DIST_DIR}/VERSION"; then
+      # the file carries its own v_suffix; an 'rcN' argument must win over it
+      arg_suffix="${v_suffix}"
       source "${DIST_DIR}/VERSION"
+      if test -n "${arg_suffix}"; then
+        v_suffix="${arg_suffix}"
+      fi
     elif test -f include/ap_release.h; then
       # determine version from local files
       v_major=`grep -E '#define\sAP_SERVER_MAJORVERSION_NUMBER' include/ap_release.h | awk '{print $3}'`
@@ -138,16 +211,42 @@ detect_version() {
 
   # double check that our checkout matches the version we detected
   if test -f include/ap_release.h; then
-    svn_v_major=`grep -E '#define\sAP_SERVER_MAJORVERSION_NUMBER' include/ap_release.h | awk '{print $3}'`
-    svn_v_minor=`grep -E '#define\sAP_SERVER_MINORVERSION_NUMBER' include/ap_release.h | awk '{print $3}'`
-    if test "$v_major" != "$svn_v_major" -o "$v_minor" != "$svn_v_minor"; then
-      fail "detect version ${v_major}.${v_minor} does not match checkout verison ${svn_v_major}.${svn_v_minor}"
+    co_v_major=`grep -E '#define\sAP_SERVER_MAJORVERSION_NUMBER' include/ap_release.h | awk '{print $3}'`
+    co_v_minor=`grep -E '#define\sAP_SERVER_MINORVERSION_NUMBER' include/ap_release.h | awk '{print $3}'`
+    if test "$v_major" != "$co_v_major" -o "$v_minor" != "$co_v_minor"; then
+      fail "detect version ${v_major}.${v_minor} does not match checkout verison ${co_v_major}.${co_v_minor}"
     fi
   fi
   VERSION="${v_major}.${v_minor}.${v_patch}"
   FULL_VERSION="${VERSION}"
   if test -n "${v_suffix}"; then
     FULL_VERSION="${VERSION}-${v_suffix}"
+  fi
+  CANDIDATE_TAG="${FULL_VERSION}-candidate"
+  RELEASE_TAG="${VERSION}"
+
+  # a release started with one SCM/DIST_MODE must finish with the same one
+  check_recorded_modes
+}
+
+# fail if dist/VERSION was written under a different SCM or DIST_MODE than
+# the current one. Switching backends is meant to happen between releases.
+# SCM_FORCE=1 overrides.
+check_recorded_modes() {
+  test -f "${DIST_DIR}/VERSION" || return 0
+  rec_scm=`sed -n 's/^scm="\(.*\)"$/\1/p' "${DIST_DIR}/VERSION"`
+  rec_dist_mode=`sed -n 's/^dist_mode="\(.*\)"$/\1/p' "${DIST_DIR}/VERSION"`
+  if test -n "${rec_scm}" -a "${rec_scm}" != "${SCM}"; then
+    if test "${SCM_FORCE}" != 1; then
+      fail "${DIST_DIR}/VERSION was written with SCM=${rec_scm}, now SCM=${SCM}. Finish the release with the same backend, or set SCM_FORCE=1."
+    fi
+    warn "${DIST_DIR}/VERSION was written with SCM=${rec_scm}, continuing with SCM=${SCM} (SCM_FORCE=1)"
+  fi
+  if test -n "${rec_dist_mode}" -a "${rec_dist_mode}" != "${DIST_MODE}"; then
+    if test "${SCM_FORCE}" != 1; then
+      fail "${DIST_DIR}/VERSION was written with DIST_MODE=${rec_dist_mode}, now DIST_MODE=${DIST_MODE}. A rehearsal must not be half-published; set SCM_FORCE=1 if you really mean it."
+    fi
+    warn "${DIST_DIR}/VERSION was written with DIST_MODE=${rec_dist_mode}, continuing with DIST_MODE=${DIST_MODE} (SCM_FORCE=1)"
   fi
 }
 
@@ -157,6 +256,8 @@ v_major="${v_major}"
 v_minor="${v_minor}"
 v_patch="${v_patch}"
 v_suffix="${v_suffix}"
+scm="${SCM}"
+dist_mode="${DIST_MODE}"
 EOF
 }
 
@@ -282,7 +383,7 @@ sign_dist_files() {
   elif test -x "${gpg}"; then
     args=""
     if test -n "${signing_user}"; then
-      args="-u ${signing_useruser}"
+      args="-u ${signing_user}"
     fi
     for file in "$@"; do
       echo " - gpg: creating asc signature file for ${file} ..."
@@ -439,7 +540,7 @@ add_changes_entry() {
 
 stage_checkout_release() {
   # make sure we are up-to-date
-  svn up
+  scm_update_checkout
   # calculate the next patch version
   is_int ${v_patch} || fail "version patch '${v_patch}' is not a number"
   next_patch=`expr ${v_patch} + 1`
@@ -505,11 +606,7 @@ stage_checkout_release() {
 }
 
 checkout_pmc() {
-  dest="$1"
-  test -n "${SVN_PMC_URL}" || fail "SVN_PMC_URL not set"
-  echo "checking out pmc/${PROJECT} as ${dest}"
-  rm -rf "${dest}"
-  svn checkout "${SVN_PMC_URL}/${PROJECT}" "${dest}" >/dev/null
+  pmc_checkout "$1"
 }
 
 calc_ready_CVE_DIRS() {

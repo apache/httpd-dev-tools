@@ -12,9 +12,8 @@ set -e
 usage () {
     cat <<EOF 1>&2
 usage: $0 [options] [version]
-  create the release tars from a SVN candidate. The candidate is expected
-  to be found in SVN at 'tags/$version-candidate', as prepared by the
-  'make-candidate.sh' script.
+  sign the release tars of a release candidate found in the local dist
+  directory (created by 'r1-make-tars.sh').
   If no version is given, the current version in the checkout is used.
   Arguments:
     version        as 'm.n.p(-suffix)?', the version to use.
@@ -42,13 +41,11 @@ source `dirname $0`/env.sh
 detect_checkout
 detect_version $1
 
-SVN_DEST="tags/${FULL_VERSION}-candidate"
-
 cat <<EOF
-creating release tars:
+signing release tars:
   PROJECT: $PROJECT
   VERSION: $FULL_VERSION
-  CANDIDATE: $SVN_BASE/$SVN_DEST
+  CANDIDATE: `scm_describe_candidate`
   LOCAL: $DIST_DIR
 EOF
 
@@ -61,8 +58,8 @@ TAR_PATH="${DIST_DIR}/${TAR_BASENAME}"
 SVN_DIST_URL="https://dist.apache.org/repos/dist/release/httpd"
 SVN_DIST_KEYS=KEYS
 
-svn ls "$SVN_BASE/$SVN_DEST" >/dev/null 2>&1 ||
-  fail "release candidate does not exist in SVN: $SVN_DEST"
+scm_ref_exists "$CANDIDATE_TAG" candidate ||
+  fail "release candidate does not exist: `scm_candidate_ref`"
 
 test -d "$DIST_DIR" || mkdir -p "$DIST_DIR"
 

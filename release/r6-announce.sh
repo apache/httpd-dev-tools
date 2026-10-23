@@ -43,19 +43,14 @@ detect_version $1
 
 test -n "${asf_id}" || fail "please specify your ASF id as '-u <asf-id>'"
 
-AO_DIST_PATH="dist/apache.org-dist"
+AO_DIST_PATH="${DIST_DIR}/apache.org-dist"
 AO_DIST_RELEASE_PATH="${AO_DIST_PATH}/release/${PROJECT}"
 
 TAR_BASENAME="${PROJECT}-${VERSION}"
 ANNOUNCEMENT="Announcement${v_major}.${v_minor}.txt"
 ANNOUNCE_LISTS="announce@apache.org announce@httpd.apache.org"
 
-# SVN repository is huge, carefully check out only what we need
-rm -rf "${AO_DIST_PATH}"
-echo "checking out dist from ${SVN_DIST_URL} ..."
-svn checkout --depth=empty "$SVN_DIST_URL" "${AO_DIST_PATH}" >/dev/null
-echo "checking out ${AO_DIST_RELEASE_PATH} ..."
-svn update --set-depth immediates --parents "${AO_DIST_RELEASE_PATH}" >/dev/null
+dist_checkout "${AO_DIST_PATH}" "release/${PROJECT}"
 
 if ! ls "${AO_DIST_RELEASE_PATH}/${TAR_BASENAME}".* >/dev/null 2>&1; then
   fail "not found: ${AO_DIST_RELEASE_PATH}/${TAR_BASENAME}.*"
@@ -69,7 +64,13 @@ fi
 
 # downloads.apache.org syncs from SVN with some delay, and anything the CDN
 # fetches in the meantime (an outdated file or a 404) stays cached for a while.
+if dist_mode_is_local; then
+  warn "DIST_MODE=local: nothing was published, skipping the downloads.apache.org/dlcdn check"
+fi
 for changes in "CHANGES_${VERSION}" "CHANGES_${v_major}.${v_minor}"; do
+  if dist_mode_is_local; then
+    break
+  fi
   for base in "https://downloads.apache.org/${PROJECT}" "https://dlcdn.apache.org/${PROJECT}"; do
     echo "verifying ${base}/${changes} ..."
     if ! curl -fsSL "${base}/${changes}" |
@@ -112,7 +113,7 @@ EOF
 done
 
 
-CVES_MENTIONED=`fgrep CVE- dist/apache.org-dist/release/httpd/CHANGES_${VERSION}`
+CVES_MENTIONED=`fgrep CVE- "${AO_DIST_RELEASE_PATH}/CHANGES_${VERSION}" || true`
 if test -n "${CVES_MENTIONED}"; then
   CVE_COUNT=`echo "${CVES_MENTIONED}" | grep -oE 'CVE-[0-9]+-[0-9]+' | sort -u | wc -l | tr -d ' '`
   cat << EOF

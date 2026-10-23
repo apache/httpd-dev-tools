@@ -34,12 +34,6 @@ source `dirname $0`/env.sh
 detect_checkout
 detect_version ""
 
-PROJECT=`basename $SVN_BASE`
-SVN_DEST="tags/${FULL_VERSION}-candidate"
-SVN_RELEASE="tags/${VERSION}"
-
-DIST_DIR="dist"
-
 calc_ready_CVE_DIRS "${DIST_DIR}/pmc-check"
 echo
 if test -n "${CVE_DIRS}"; then
