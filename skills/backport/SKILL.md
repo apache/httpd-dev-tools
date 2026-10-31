@@ -1,18 +1,19 @@
 ---
 name: backport
-description: Propose a backport of trunk revisions to 2.4.x - cherry-pick each rev into its own commit on a new branch and worktree off origin/2.4.x, build it, and open a "[2.4.x] Merge ..." PR after previewing the text, then draft its STATUS entry. Use for "backport r1234567 to 2.4.x", "propose a backport of <hash>", "/backport mod_ssl r1934975 r1934980".
+description: Propose a backport of trunk revisions to 2.4.x - cherry-pick each rev into its own commit on a new branch and worktree off origin/2.4.x, build it, and open a "[2.4.x] Merge ..." PR after previewing the text. Use for "backport r1234567 to 2.4.x", "propose a backport of <hash>", "/backport mod_ssl r1934975 r1934980".
 ---
 
 # Propose a trunk → 2.4.x backport
 
 Given one or more trunk revisions, build a `2.4.x-<topic>` branch off `origin/2.4.x` with
 **one commit per trunk revision**, build it, and open a PR against `2.4.x` whose body
-quotes the trunk commit messages.
+quotes the trunk commit messages. The repository is now read/write Git: the PR is the
+backport proposal, and no `STATUS` entry is needed.
 
 Usage: `/backport <topic> r1234567 [r2345678 | <githash> ...]`. Revisions may be given as
-svn revs or trunk git hashes. `<topic>` names the branch and fills the PR subject (e.g.
-`mod_ssl`, `mod_proxy_http`); if it is not given, pick one from the files touched and say
-so.
+svn revs or trunk git hashes; commits made since the move to Git have a hash only.
+`<topic>` names the branch and fills the PR subject (e.g. `mod_ssl`, `mod_proxy_http`);
+if it is not given, pick one from the files touched and say so.
 
 ## 0. Preflight
 
@@ -33,7 +34,7 @@ so.
 
 ## 1. Identify the trunk commits
 
-Record **both** the git hash and the svn revision for every commit.
+Record the git hash for every commit, and its svn revision where it has one.
 
 - Rev → hash (the trailing space stops r123 matching r1234):
   ```
@@ -44,19 +45,46 @@ Record **both** the git hash and the svn revision for every commit.
   ```
   git show <hash> --no-patch --format=%b | grep -o 'trunk@[0-9]*'
   ```
+  No output means a post-svn commit: it has no revision, and is named by its hash (the
+  first 10 characters) wherever this skill says `r<x>`.
 - Confirm each is on trunk: `git merge-base --is-ancestor <hash> origin/trunk`.
 - Order them oldest first (trunk order), whatever order they were given in.
 
-Check whether any is already in 2.4.x. The repo is mirrored from svn, where a backport is
-a fresh commit, so `git cherry` and `git branch --contains` say nothing; grep the
-`origin/2.4.x` log for the rev (`git log origin/2.4.x --grep='r1234567'`) and compare the
-code itself.
+Check whether any is already in 2.4.x. A backport is a fresh commit, so `git cherry` and
+`git branch --contains` say nothing; grep the `origin/2.4.x` log for the rev and the hash
+(`git log origin/2.4.x --grep='r1234567' --grep='<hash>'`; `cherry-pick -x` records the
+hash) and compare the code itself.
 
-Print a table and confirm it with the user before going further:
+Check too whether each rev's **test changes** are already on 2.4.x. `test/` is kept
+identical on trunk and 2.4.x (`test/check-test-sync.sh`; see "Tests of changes missing
+from 2.4.x" in `test/README.pytest`), so a trunk test usually reaches 2.4.x ahead of the
+code it tests, carrying a `not_backported`/`skip_not_backported` mark naming the rev. For
+each rev touching `test/`, find the marks naming it:
 
-| rev | hash | subject |
-| --- | --- | --- |
-| r1234567 | 0123456789 | ... |
+```
+git grep -n -e 'not_backported' origin/2.4.x -- test | grep '<rev>'
+```
+
+A mark may name a range (`"r1937596-r1937647"`); check by eye whether a rev falls inside
+one. Then compare the files the rev touches between the branches:
+
+```
+files=$(git diff-tree --no-commit-id --name-only -r <hash> -- test)
+git diff --quiet origin/trunk origin/2.4.x -- $files && echo synced || echo 'not synced'
+```
+
+`synced` means 2.4.x has the rev's test changes (and any later trunk ones). On
+`not synced`, read that diff: trunk may only have moved on since the last copy, in which
+case the rev's hunks are still on 2.4.x. A reverse `git apply --check` of the rev's test
+hunks is no help, as later trunk commits (adding the very mark, typically) change the
+same lines.
+
+Print a table and confirm it with the user before going further, including the test
+state of each rev (`n/a`, `synced`, `not synced`) and the marks found:
+
+| rev | hash | subject | tests |
+| --- | --- | --- | --- |
+| r1234567 | 0123456789 | ... | synced; 2 marks |
 
 ## 2. Branch, worktree, configure
 
@@ -86,11 +114,6 @@ In trunk order:
 ```
 git cherry-pick -x <hash>
 ```
-
-**Every pick drops the trunk `git-svn-id:` line**, amended out with
-`git commit --amend -F <file>` (file in the scratchpad): it names trunk's svn revision,
-and the 2.4.x commit gets its own `git-svn-id:` when it reaches svn, so a kept one is
-duplicated there. Collapse the blank lines it leaves to one.
 
 **A commit used exactly as-is** (it applies cleanly and nothing is dropped from it) keeps
 the rest of the message `cherry-pick -x` gives it: the trunk message byte-for-byte, then
@@ -134,6 +157,58 @@ drop those hunks (`git rm -f` / `git checkout HEAD --`), give the commit the pre
 (`(docs and test changes omitted)`), and remove the `* docs/...` and `* test/...` bullet
 paragraphs for them from the trunk message, so it describes only what the commit contains.
 
+**Tests already synced**: if step 1 found a rev's `test/` changes already on 2.4.x, the
+pick will conflict on them, or apply them a second time. Drop every `test/**` change from
+it (`git checkout HEAD -- test`) so the 2.4.x copy stays exactly what was synced, and
+treat it as omitted files: prefix `(test changes already on 2.4.x)` and remove its
+`* test/...` bullets. If its test changes are only partly synced, stop and report rather
+than merging them by hand.
+
+## 3a. Record the backport in the `not_backported` marks
+
+After the last pick, the 2.4.x build has the changes that the marks step 1 found are
+waiting for. Left as they are, the marks would turn a regression into an expected failure,
+or skip the test altogether. The marks stay in place, since older 2.4.x releases still
+lack the change. Instead each one gets the release the backport will first appear in, per
+`test/README.pytest`. That release is the version the 2.4.x tree is building now, `-dev`
+suffix dropped:
+
+```
+git show origin/2.4.x:include/ap_release.h \
+  | grep -E '#define AP_SERVER_(MAJOR|MINOR|PATCH)VERSION_NUMBER'
+```
+
+(e.g. `2.4.70`; a `-dev` server counts as that release). For each
+`not_backported(...)` / `skip_not_backported(...)` naming a rev on the branch, add the
+keyword argument after the existing ones, wherever the mark is applied (a decorator, a
+`pytestmark = ...` line, a module-level `NOT_BACKPORTED = ...`, the `marks=` of a
+`pytest.param`):
+
+```
+@not_backported("r1939033", "nonce-count validation", backported_in="2.4.70")
+```
+
+Change nothing else on the line. A mark naming a range or several revs, not all of which
+are on the branch, keeps no `backported_in`: flag it in the report instead. Never touch a
+mark for a rev not on the branch.
+
+`test/` is edited on trunk and copied to 2.4.x, so this edit belongs on trunk too, and
+both branches must end up byte-identical under `test/`. Make it **once**, as one commit in
+the repo's ChangeLog style with the `Co-Authored-By` trailer:
+
+```
+* test/modules/aaa/test_003_nccheck.py (TestNcCheck.test_digest_001,
+  TestNcCheck.test_digest_002): Mark as backported in 2.4.70.
+```
+
+- Commit it on the backport branch, after the picks.
+- Cherry-pick the same commit onto a branch `trunk-<topic>-bp` off `origin/trunk`, in a
+  second worktree under `.claude/worktrees/`. It must apply cleanly there. If trunk's copy
+  of the file has moved on, stop and report instead of resolving it.
+- Check that `git diff <backport branch> trunk-<topic>-bp -- <the edited files>` is
+  empty. Then ask the user how the trunk side should land: committed to trunk directly,
+  or a PR (preview its text first, as in step 5). Don't push it unasked.
+
 ## 4. Build
 
 From the top level of the worktree:
@@ -145,6 +220,10 @@ make -j$(nproc)
 Never `make -C modules/<dir>`: it leaves the `.so` stale. Treat a new compiler warning in
 the touched files as a failure. Report any failure verbatim, fix it (a backport-specific
 fix goes in that rev's commit, noted as a conflict resolution) and rebuild.
+
+If step 3a edited any marks, run the tests that carried them against this build
+(`make check-pytest PYTEST_DIRS=<dirs>`, per the local guidance). They must pass, not
+XPASS or skip; a failure means the backport is incomplete, so report it and stop.
 
 ## 5. Push, preview the PR, then create it
 
@@ -161,8 +240,11 @@ Draft the PR:
 - Body: a `Merge ... from trunk:` line, then each trunk message inline-quoted (every line
   prefixed with `> `), a blank line between them. Take each revision from the trunk
   commit named in its `(cherry picked from commit ...)` line (`git-svn-id: ...trunk@NNN`
-  there). Quote the trunk message only: drop the `(cherry picked from ...)` line and any
-  `Merge r...` prefix, whose explanation belongs in a note instead:
+  there; a post-svn commit is listed by its 10-character hash instead). Quote the trunk
+  message only: drop the `(cherry picked from ...)` line and any `Merge r...` prefix,
+  whose explanation belongs in a note instead. The marks commit from step 3a is not
+  quoted; mention it in one line after the quotes, with a link to the trunk side once it
+  exists:
 
   ```
   Merge r1234567, r2345678 from trunk:
@@ -189,42 +271,6 @@ gh pr create --repo apache/httpd --base 2.4.x --head $FORK_OWNER:2.4.x-<topic> \
 
 Report the PR URL. Leave the worktree in place for follow-ups and give the command to
 remove it: `git worktree remove .claude/worktrees/<name>`.
-
-## 6. STATUS entry
-
-Once the PR exists, give the user an entry to paste into the 2.4.x `STATUS` file, under
-`PATCHES PROPOSED TO BACKPORT FROM TRUNK:`. Output it only; do not edit or commit
-`STATUS`. The shape, 2-space indent for `*)`, 5 for the fields, continuation URLs aligned
-under the first:
-
-```
-  *) mod_foo: One-line CHANGES-style summary of what the backport does.
-     trunk patch: https://svn.apache.org/r1234567
-                  https://svn.apache.org/r2345678
-     2.4.x patch: https://github.com/apache/httpd/pull/NNN.patch
-     +1:
-```
-
-- One `https://svn.apache.org/rNNN` line per revision on the branch, in trunk order,
-  including any added later (dependencies, follow-up fixes).
-- The summary uses the same prefix a CHANGES entry would (`mod_foo:`, `core:`), written
-  for a voter, not a list of the commit subjects.
-- **The `+1:` line MUST be empty**: `     +1:` with nothing after it, not even a trailing
-  space. Votes are added by the committers themselves.
-
-Then offer to copy the entry to the clipboard. On a yes, write it to a file in the
-scratchpad and use whichever tool the session has a display for:
-
-```
-if [ -n "$WAYLAND_DISPLAY" ] && command -v wl-copy >/dev/null; then wl-copy < <file>
-elif [ -n "$DISPLAY" ] && command -v xclip >/dev/null; then xclip -selection clipboard < <file>
-elif command -v pbcopy >/dev/null; then pbcopy < <file>
-fi
-```
-
-If none applies (e.g. an SSH session), say so and leave the entry in the reply to copy by
-hand. Check the file has no trailing whitespace (`grep -n ' $' <file>` finds nothing)
-before copying.
 
 ## Notes
 
