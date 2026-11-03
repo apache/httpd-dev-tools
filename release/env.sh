@@ -31,13 +31,21 @@ fi
 # push, clone). Taken from the URL of a remote of the working directory;
 # the scripts then pass that URL explicitly and never use the remote name.
 #
-# 'origin' is right while git is read-only for the project (the svn->git
-# mirror era): a clone of your fork has origin = the fork, which makes every
-# run a rehearsal (DIST_MODE=local is implied for forks).
-GIT_SRC_REMOTE="${GIT_SRC_REMOTE:-origin}"
-# Once git is read/write and the project releases from it, the usual layout
-# is origin = your fork, upstream = apache/httpd. Switch to this then:
-#GIT_SRC_REMOTE="${GIT_SRC_REMOTE:-upstream}"
+# The project releases from github.com:apache/httpd. The usual clone layout
+# is origin = your fork, upstream = apache/httpd, so the remote named
+# 'upstream' is used when the clone has one and 'origin' otherwise (a
+# direct clone of apache/httpd). A clone whose chosen remote is a fork
+# makes every run a rehearsal (DIST_MODE=local is implied for forks); set
+# GIT_SRC_REMOTE=origin explicitly to rehearse from a clone that also has
+# an 'upstream' remote.
+if test -z "${GIT_SRC_REMOTE}" -a "${SCM}" = git; then
+  if git remote get-url upstream >/dev/null 2>&1; then
+    GIT_SRC_REMOTE=upstream
+  else
+    GIT_SRC_REMOTE=origin
+  fi
+fi
+GIT_SRC_REMOTE="${GIT_SRC_REMOTE:-upstream}"
 
 if test -z "${GIT_SRC_URL}" -a "${SCM}" = git; then
   GIT_SRC_URL=$(git remote get-url "${GIT_SRC_REMOTE}" 2>/dev/null || true)

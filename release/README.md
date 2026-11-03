@@ -4,8 +4,11 @@
 
 1. make sure `jq` is in your path
 2. have a checkout of https://svn.apache.org/repos/asf/httpd/dev-tools and set environment variable $DEV_TOOLS in the environment
-3. have a checkout of the httpd branch to release: a svn working copy or a
-   git clone.
+3. have a clone of https://github.com/apache/httpd with the branch to
+   release checked out (the project releases from git since the cutover;
+   a svn working copy of the branch still works for older setups). With the
+   usual layout of origin = your fork and upstream = apache/httpd the
+   scripts use the `upstream` remote; see GIT_SRC_REMOTE in env.sh.
 
 ## preflight checks
 
@@ -256,8 +259,8 @@
 
 ## Misc notes
 The local checkout:
- - same as you otherwise use, e.g. of ^/httpd/httpd/branches/2.4.x, or in
-   git mode a clone of https://github.com/apache/httpd with 2.4.x checked out
+ - same as you otherwise use, e.g. a clone of https://github.com/apache/httpd
+   with 2.4.x checked out (or, in svn mode, ^/httpd/httpd/branches/2.4.x)
  - make sure that it builds and passes the tests for you
  - make-candidate.sh checks if "changes-entries" is empty. Do
    > make update-changes

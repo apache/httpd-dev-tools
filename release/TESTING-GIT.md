@@ -1,9 +1,10 @@
-# Testing the git backend before cutover
+# Rehearsing a release on a personal fork
 
 The release scripts drive the httpd source repository through svn or git,
-depending on whether they run from a svn working copy or a git clone. This
-document is the checklist for exercising
-the git backend against a personal fork while the project is still on svn.
+depending on whether they run from a svn working copy or a git clone. The
+project releases from `apache/httpd` on github.com since the cutover, so
+git is the normal mode. This document is the checklist for exercising the
+git backend against a personal fork, e.g. before a change to the scripts.
 Nothing here touches `apache/httpd`, `dist.apache.org` or the `pmc`
 repository. See `README.md` for the normal release procedure and
 `GIT-MIGRATION-PLAN.md` for the design.
@@ -19,8 +20,9 @@ repository. See `README.md` for the normal release procedure and
 | `docs-build`, APR tags | read-only svn checkouts/exports, as in a real release |
 | GitHub Actions on your fork | runs on each candidate branch push and on the release tag |
 
-The source repository is the URL of the clone's `origin` remote
-(`GIT_SRC_REMOTE`); each script prints it as `source repository: ...`.
+The source repository is the URL of the clone's `upstream` remote when it
+has one, else `origin` (`GIT_SRC_REMOTE`); each script prints it as
+`source repository: ...`. For a rehearsal that remote must be the fork.
 `DIST_MODE=local` is implied as soon as the scripts run from a git clone and
 that repository is not `apache/httpd`. Every script prints
 `DIST_MODE=local (implied by fork ...): nothing will be committed to dist.apache.org or pmc`
@@ -47,16 +49,18 @@ at start. If you do not see that line, stop.
 
    Build it once so `buildconf` dependencies are known to work. The scripts
    check the rest at start (clean tree, `HEAD` pushed, identity, push
-   access) and tell you what to fix. `origin` must be the fork: if your
-   everyday clone has `origin` = `apache/httpd` and the fork under another
-   name, run with `GIT_SRC_REMOTE=<that name>` or use a dedicated clone.
+   access) and tell you what to fix. The remote the scripts pick must be
+   the fork: a dedicated clone of the fork has only `origin`, which is
+   used. In an everyday clone with `upstream` = `apache/httpd` the scripts
+   would release for real, so run with `GIT_SRC_REMOTE=origin` (or the
+   name of the fork's remote) there.
 
 5. Environment, exported once in the shell you run the scripts from:
 
    ```
    export DEV_TOOLS=~/asf/dev-tools
    # SCM=git is detected from the clone's .git and GIT_SRC_URL from its
-   # 'origin' remote (the fork); neither needs to be set
+   # only remote 'origin' (the fork); neither needs to be set
    export GIT_SITE_URL=git@github.com:<you>/httpd-site.git
    export PROJECT=httpd            # only needed if the fork is not named httpd
    # DIST_MODE=local is implied; do not set DIST_MODE=svn
@@ -169,10 +173,10 @@ Known, by design or waiting for a project decision:
    `protected_branches` patterns against `*-candidate`. Release tags are
    only ever created, so `protected_tags` is not a problem. Confirm with
    Infra; a fork cannot test this.
-6. **Mirror direction at cutover.** While the svn to git mirror runs, a git
-   mode release is not mirrored back into svn. The project has to decide
-   which side is authoritative before the RM starts releasing from a git
-   clone; nothing in the scripts enforces that decision.
+6. **svn is no longer authoritative.** Since the cutover a git mode
+   release is not mirrored into svn; the svn branches and tags are frozen
+   at the cutover point. Nothing in the scripts stops a release from an old
+   svn working copy, so do not run from one.
 7. **Historic candidate tags.** The mirror left tags such as
    `2.4.65-rc1-candidate`. New candidates are branches with new names so
    they never collide, but anyone who fetches both a tag and a branch of the
@@ -218,11 +222,14 @@ first real git release: real `svn commit` to dist and pmc through the
 regression run below), CDN propagation, the website buildbot, gitbox
 credential handling for `apache/httpd`.
 
-## 6. svn regression run
+## 6. svn regression run (historical)
+
+This section predates the cutover; the svn branches are frozen now and a
+candidate must not be created in svn. Kept for reference.
 
 The refactor moved the svn code into `scm-svn.sh` and the dist/pmc verbs into
-`dist-lib.sh`. To prove the svn path is unchanged without a real release,
-run from the real `2.4.x` svn checkout during a quiet period:
+`dist-lib.sh`. To prove the svn path was unchanged without a real release,
+this was run from the real `2.4.x` svn checkout during a quiet period:
 
 ```
 export DIST_MODE=local        # SCM=svn is detected from the working copy
@@ -243,5 +250,5 @@ source repository, so the `svn mv` of the tag is not rehearsed.
 For each run note: the fork, the version used, the `dist/VERSION` contents,
 the ref listing of the fork after step 6 and after step 8, the section 4
 diff output, and anything that needed a manual fix. Findings that change
-tarball content (section 5, items 1 to 3) block cutover; the rest are
-documentation or decisions.
+tarball content (section 5, items 1 to 3) block the next release; the rest
+are documentation or decisions.

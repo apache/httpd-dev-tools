@@ -9,9 +9,9 @@
 #  - the release is an annotated (optionally signed) tag refs/tags/${RELEASE_TAG}
 #    pointing at the candidate's final commit. Tags are never deleted or moved.
 #  - every remote operation names GIT_SRC_URL explicitly. env.sh takes that
-#    URL from the remote GIT_SRC_REMOTE ('origin' by default) of the working
-#    directory unless GIT_SRC_URL is given; the remote name itself is never
-#    used afterwards.
+#    URL from the remote GIT_SRC_REMOTE of the working directory ('upstream'
+#    when the clone has such a remote, else 'origin') unless GIT_SRC_URL is
+#    given; the remote name itself is never used afterwards.
 
 # git_host_from_url URL   prints the host part of a git URL, empty for
 # local paths and file:// URLs
