@@ -89,7 +89,7 @@ sync_timing() {
 
 # cache_timing HEADERS   reports, from the response headers curl saved in
 # HEADERS, the HTTP status and for how long a cache (the CDN) has been
-# holding that response. Says nothing about caching if there is no Age header.
+# holding that response, or that it came fresh from the origin.
 cache_timing() {
   perl -e '
     local $/;
@@ -102,14 +102,38 @@ cache_timing() {
     my ($status) = $h =~ m{^HTTP/\S+\s+(\d+)};
     my ($age) = $h =~ /^age:\s*(\d+)/mi;
     my ($xcache) = $h =~ /^x-cache:\s*(.+)$/mi;
-    if (defined $age) {
+    if (defined $age && $age > 0) {
       printf STDERR "HTTP %s response has been cached for %dh %02dm %02ds (Age: %d%s)\n",
         $status, int($age / 3600), int($age % 3600 / 60), $age % 60, $age,
         defined $xcache ? ", X-Cache: $xcache" : "";
     } else {
-      printf STDERR "HTTP %s response carries no Age header, so it was not served from a cache\n", $status;
+      printf STDERR "HTTP %s response came fresh from the origin, not from a cache%s\n", $status,
+        defined $xcache ? " (X-Cache: $xcache)" : "";
     }
   ' "$1" || true
+}
+
+# verify_url URL FILE UNAVAILABLE_MSG   fails unless URL can be downloaded
+# and matches FILE in the dist checkout. A failed download (typically a 404)
+# is reported with UNAVAILABLE_MSG rather than as a content mismatch.
+verify_url() {
+  url="$1"
+  shown="${1%%\?*}"
+  fetched=`mktemp`
+  headers=`mktemp`
+  if ! curl -fsSL -D "${headers}" -o "${fetched}" "${url}"; then
+    sync_timing "${AO_DIST_RELEASE_PATH}/$2"
+    cache_timing "${headers}"
+    rm -f "${fetched}" "${headers}"
+    fail "${shown} $3, then rerun $0"
+  fi
+  if ! cmp -s "${fetched}" "${AO_DIST_RELEASE_PATH}/$2"; then
+    sync_timing "${AO_DIST_RELEASE_PATH}/$2"
+    cache_timing "${headers}"
+    rm -f "${fetched}" "${headers}"
+    fail "${shown} does not match SVN. Wait (the CDN cache expires within about 30 minutes) or ask ASF Infra to purge it, then rerun $0"
+  fi
+  rm -f "${fetched}" "${headers}"
 }
 
 # downloads.apache.org syncs from SVN with some delay, and anything the CDN
@@ -123,24 +147,17 @@ for changes in "CHANGES_${VERSION}" "CHANGES_${v_major}.${v_minor}"; do
   fi
   for base in "https://downloads.apache.org/${PROJECT}" "https://dlcdn.apache.org/${PROJECT}"; do
     echo "verifying ${base}/${changes} ..."
-    # Fetch first so a failed download (typically a 404 because the file
-    # has not been synced yet) is not reported as a content mismatch.
-    fetched=`mktemp`
-    headers=`mktemp`
-    if ! curl -fsSL -D "${headers}" -o "${fetched}" "${base}/${changes}"; then
-      sync_timing "${AO_DIST_RELEASE_PATH}/${changes}"
-      cache_timing "${headers}"
-      rm -f "${fetched}" "${headers}"
-      fail "${base}/${changes} is not available yet (see the curl error above). Nothing is wrong: either the file has not been synced from SVN yet, or the CDN is still caching an earlier 404. Wait for it to appear, then rerun $0"
-    fi
-    if ! cmp -s "${fetched}" "${AO_DIST_RELEASE_PATH}/${changes}"; then
-      sync_timing "${AO_DIST_RELEASE_PATH}/${changes}"
-      cache_timing "${headers}"
-      rm -f "${fetched}" "${headers}"
-      fail "${base}/${changes} does not match SVN. Wait (the CDN cache expires within about 30 minutes) or ask ASF Infra to purge it, then rerun $0"
-    fi
-    rm -f "${headers}"
-    rm -f "${fetched}"
+    # First ask with a unique query string. The CDN keys its cache on the
+    # full URL, so this always reaches the origin and, if the file is not
+    # there yet, the resulting 404 is not cached for the real URL.
+    # (The CDN ignores Cache-Control: no-store/only-if-cached on requests.)
+    verify_url "${base}/${changes}?nocache=`date +%s`-$$" "${changes}" \
+      "is not available yet (see the curl error above). Nothing is wrong: the file just has not been synced from SVN yet. Wait for it to appear"
+    # The origin has the right file, so asking for the real URL can no
+    # longer plant a 404, but it still shows an already cached 404 or an
+    # outdated copy, which is what users would get.
+    verify_url "${base}/${changes}" "${changes}" \
+      "is on the origin, but the CDN is still serving an older cached response (see the curl error above). Wait for the cache to expire or ask ASF Infra to purge it"
   done
 done
 
