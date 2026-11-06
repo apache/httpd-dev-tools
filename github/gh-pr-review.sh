@@ -55,10 +55,10 @@ link() {
 }
 
 usage() {
-    echo "Usage: $0 [-b branch] [-a] [-r] [-u] [-c] [-j] [PR-number...]" >&2
+    echo "Usage: $0 [-b branch] [-a] [-d] [-u] [-c] [-j] [PR-number...]" >&2
     echo "  -b branch   base branch to list PRs for (default $BASE)" >&2
-    echo "  -a          include draft PRs" >&2
-    echo "  -r          only list PRs with enough votes to merge" >&2
+    echo "  -a          only list approved PRs (enough votes to merge)" >&2
+    echo "  -d          include draft PRs" >&2
     echo "  -u          ignore PRs with merge conflicts" >&2
     echo "  -c          only list PRs where CI passes" >&2
     echo "  -j          machine-readable JSON output (array of PR objects)" >&2
@@ -336,12 +336,12 @@ show_pr() {
     echo
 }
 
-while getopts "harucjb:" opt; do
+while getopts "haducjb:" opt; do
     case "$opt" in
         c) CI_ONLY=1 ;;
         u) SKIP_CONFLICTS=1 ;;
-        r) READY_ONLY=1 ;;
-        a) DRAFTS=1 ;;
+        a) READY_ONLY=1 ;;
+        d) DRAFTS=1 ;;
         j) JSON=1 ;;
         b) BASE="$OPTARG" ;;
         *) usage ;;
