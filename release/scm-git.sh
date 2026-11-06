@@ -200,13 +200,16 @@ scm_git_describe_candidate() {
 
 # create the candidate branch on the server from the exact local commit
 scm_git_create_candidate() {
+  echo "pushing ${SRC_BRANCH}@${SRC_REV_SHORT} as branch ${CANDIDATE_TAG} to ${GIT_SRC_URL}"
   git push "${GIT_SRC_URL}" "${SRC_REV}:refs/heads/${CANDIDATE_TAG}"
+  echo "branch ${CANDIDATE_TAG} is now on ${GIT_SRC_URL}"
 }
 
 # scm_git_checkout_candidate DIR   an independent clone, 'origin' is GIT_SRC_URL.
 # The identity of the main clone is copied in, so a user.email set only
 # locally there still applies to the "Post tag updates" commit.
 scm_git_checkout_candidate() {
+  echo "cloning branch ${CANDIDATE_TAG} from ${GIT_SRC_URL} into $1"
   git clone -q --branch "${CANDIDATE_TAG}" --single-branch --depth 1 "${GIT_SRC_URL}" "$1"
   git -C "$1" config user.name "${GIT_USER_NAME}"
   git -C "$1" config user.email "${GIT_USER_EMAIL}"
@@ -232,7 +235,11 @@ scm_git_commit_candidate() {
   else
     echo "nothing to commit in $1"
   fi
+  # 'origin' of this clone is GIT_SRC_URL (see scm_git_checkout_candidate),
+  # never the 'origin' of the release manager's own checkout.
+  echo "pushing branch ${CANDIDATE_TAG} to ${GIT_SRC_URL}"
   git -C "$1" push origin HEAD
+  echo "pushed `git -C "$1" rev-parse --short HEAD` to branch ${CANDIDATE_TAG} on ${GIT_SRC_URL}"
 }
 
 # how to follow the CI run triggered by the candidate push

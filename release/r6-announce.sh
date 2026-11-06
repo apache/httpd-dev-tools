@@ -73,10 +73,18 @@ for changes in "CHANGES_${VERSION}" "CHANGES_${v_major}.${v_minor}"; do
   fi
   for base in "https://downloads.apache.org/${PROJECT}" "https://dlcdn.apache.org/${PROJECT}"; do
     echo "verifying ${base}/${changes} ..."
-    if ! curl -fsSL "${base}/${changes}" |
-         cmp -s - "${AO_DIST_RELEASE_PATH}/${changes}"; then
+    # Fetch first so a failed download (typically a 404 because the file
+    # has not been synced yet) is not reported as a content mismatch.
+    fetched=`mktemp`
+    if ! curl -fsSL -o "${fetched}" "${base}/${changes}"; then
+      rm -f "${fetched}"
+      fail "${base}/${changes} is not available yet (see the curl error above). Nothing is wrong: the file just has not been synced from SVN yet. Wait for it to appear, then rerun $0"
+    fi
+    if ! cmp -s "${fetched}" "${AO_DIST_RELEASE_PATH}/${changes}"; then
+      rm -f "${fetched}"
       fail "${base}/${changes} does not match SVN. Wait (the CDN cache expires within about 30 minutes) or ask ASF Infra to purge it, then rerun $0"
     fi
+    rm -f "${fetched}"
   done
 done
 

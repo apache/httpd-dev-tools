@@ -13,7 +13,7 @@
 ## preflight checks
 
 1. Wherever you can best run the test suite(s), make sure it's passing on a clean tree
-2. Make sure changes-entries/ is empty and docs xforms have been built and committed
+2. Make sure changes-entries/ is empty (apart from template.txt) and docs xforms have been built and committed
 3. If there is security content:
    - Use `cveprocess_update.py --release` on all CVE's to make sure there are no stale version
      references. We often fill in the affected/fixed ranges when the CVE is accepted, but
@@ -93,7 +93,6 @@
    `$DEV_TOOLS/release/r3-push-release-tars.sh`
 
     - tars are moved to https://dist.apache.org/repos/dist/release/httpd/
-    - svn: tags/$FULL_VERSION-candidate is moved to tags/$VERSION.
       git: the candidate branch's commit is tagged $VERSION (annotated,
       signed unless GIT_SIGN_TAGS=0) and the branch $FULL_VERSION-candidate
       is deleted.
@@ -141,12 +140,12 @@
       -  update ./CHANGES ./STATUS ./include/ap_release.h
       - checks out and modifies project website
 
-      To verify, just `svn diff` (git: `git diff`) with a focus on e.g. CHANGES for CVE handling.
+      To verify, just `git diff` with a focus on e.g. CHANGES for CVE handling.
       It is likely you will want to cleanup the SECURITY changes entries folded into STATUS
       because they often have unusual formatting and some redundant info.
 
-      If the docs/ changes are all total noise, consider `svn revert -R docs`
-      (git: `git checkout -- docs`)
+      If the docs/ changes are all total noise, consider throwing them away with
+      `git checkout -- docs`
 
 4. Up until this point, everything can be reverted with:
 
@@ -262,7 +261,8 @@ The local checkout:
  - same as you otherwise use, e.g. a clone of https://github.com/apache/httpd
    with 2.4.x checked out (or, in svn mode, ^/httpd/httpd/branches/2.4.x)
  - make sure that it builds and passes the tests for you
- - make-candidate.sh checks if "changes-entries" is empty. Do
+ - make-candidate.sh checks if "changes-entries" is empty (template.txt is
+   tolerated). Do
    > make update-changes
    to merge them all into CHANGES.
  - make-candidate.sh checks if there are no local, uncomitted changes

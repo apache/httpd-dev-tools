@@ -95,8 +95,9 @@ if test -f include/ap_release.h; then
 fi
 
 if test -d changes-entries; then
-  if test "$(ls -A changes-entries)"; then
-    warn "the 'changes-entries' directory should be empty."
+  # template.txt is a permanent fixture and does not count as a pending entry
+  if test "$(ls -A changes-entries | grep -v '^template.txt$')"; then
+    warn "the 'changes-entries' directory should be empty (apart from template.txt)."
     if ! ask_yes_no "Do you want to continue anyway?"; then
       exit 1
     fi
