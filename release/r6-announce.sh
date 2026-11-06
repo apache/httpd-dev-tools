@@ -62,6 +62,56 @@ if ! test -f "${AO_DIST_RELEASE_PATH}/${ANNOUNCEMENT}"; then
   fail "not found: ${AO_DIST_RELEASE_PATH}/${ANNOUNCEMENT}"
 fi
 
+# sync_timing FILE   reports when FILE was last committed to the dist
+# repository and how long ago that was, to help judge how much longer the
+# sync to downloads.apache.org/dlcdn may take.
+sync_timing() {
+  committed=`svn info --show-item last-changed-date "$1" 2>/dev/null`
+  rev=`svn info --show-item last-changed-revision "$1" 2>/dev/null`
+  if test -z "${committed}"; then
+    echo "could not determine when `basename "$1"` was committed to the dist repository" >&2
+    return 0
+  fi
+  perl -MTime::Local -MPOSIX=strftime -e '
+    my ($name, $rev, $committed) = @ARGV;
+    my ($y, $mo, $d, $h, $mi, $s) = $committed =~ /^(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)/
+      or die "unexpected svn date: $committed\n";
+    my $then = timegm($s, $mi, $h, $d, $mo - 1, $y);
+    my $now = time;
+    my $ago = $now - $then;
+    my $fmt = "%Y-%m-%d %H:%M:%S UTC";
+    printf STDERR "%s committed to dist: %s (r%s)\n", $name, strftime($fmt, gmtime $then), $rev;
+    printf STDERR "%s current time:      %s\n", $name, strftime($fmt, gmtime $now);
+    printf STDERR "%s elapsed:           %dh %02dm %02ds\n", $name,
+      int($ago / 3600), int($ago % 3600 / 60), $ago % 60;
+  ' "`basename "$1"`" "${rev}" "${committed}" || true
+}
+
+# cache_timing HEADERS   reports, from the response headers curl saved in
+# HEADERS, the HTTP status and for how long a cache (the CDN) has been
+# holding that response. Says nothing about caching if there is no Age header.
+cache_timing() {
+  perl -e '
+    local $/;
+    my $all = <>;
+    defined $all or exit 0;
+    $all =~ s/\r//g;
+    # with redirects there is one header block per response, use the last
+    my @blocks = grep { /^HTTP\// } split /\n\n+/, $all;
+    my $h = $blocks[-1] or exit 0;
+    my ($status) = $h =~ m{^HTTP/\S+\s+(\d+)};
+    my ($age) = $h =~ /^age:\s*(\d+)/mi;
+    my ($xcache) = $h =~ /^x-cache:\s*(.+)$/mi;
+    if (defined $age) {
+      printf STDERR "HTTP %s response has been cached for %dh %02dm %02ds (Age: %d%s)\n",
+        $status, int($age / 3600), int($age % 3600 / 60), $age % 60, $age,
+        defined $xcache ? ", X-Cache: $xcache" : "";
+    } else {
+      printf STDERR "HTTP %s response carries no Age header, so it was not served from a cache\n", $status;
+    }
+  ' "$1" || true
+}
+
 # downloads.apache.org syncs from SVN with some delay, and anything the CDN
 # fetches in the meantime (an outdated file or a 404) stays cached for a while.
 if dist_mode_is_local; then
@@ -76,14 +126,20 @@ for changes in "CHANGES_${VERSION}" "CHANGES_${v_major}.${v_minor}"; do
     # Fetch first so a failed download (typically a 404 because the file
     # has not been synced yet) is not reported as a content mismatch.
     fetched=`mktemp`
-    if ! curl -fsSL -o "${fetched}" "${base}/${changes}"; then
-      rm -f "${fetched}"
-      fail "${base}/${changes} is not available yet (see the curl error above). Nothing is wrong: the file just has not been synced from SVN yet. Wait for it to appear, then rerun $0"
+    headers=`mktemp`
+    if ! curl -fsSL -D "${headers}" -o "${fetched}" "${base}/${changes}"; then
+      sync_timing "${AO_DIST_RELEASE_PATH}/${changes}"
+      cache_timing "${headers}"
+      rm -f "${fetched}" "${headers}"
+      fail "${base}/${changes} is not available yet (see the curl error above). Nothing is wrong: either the file has not been synced from SVN yet, or the CDN is still caching an earlier 404. Wait for it to appear, then rerun $0"
     fi
     if ! cmp -s "${fetched}" "${AO_DIST_RELEASE_PATH}/${changes}"; then
-      rm -f "${fetched}"
+      sync_timing "${AO_DIST_RELEASE_PATH}/${changes}"
+      cache_timing "${headers}"
+      rm -f "${fetched}" "${headers}"
       fail "${base}/${changes} does not match SVN. Wait (the CDN cache expires within about 30 minutes) or ask ASF Infra to purge it, then rerun $0"
     fi
+    rm -f "${headers}"
     rm -f "${fetched}"
   done
 done
