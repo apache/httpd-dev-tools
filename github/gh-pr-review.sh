@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Review open pull requests against apache/httpd, tallying backport votes.
 #
