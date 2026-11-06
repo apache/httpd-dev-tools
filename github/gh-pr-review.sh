@@ -22,6 +22,11 @@
 set -euo pipefail
 
 REPO="apache/httpd"
+
+# The repository lives on github.com; make sure gh talks to it even if
+# the user's default host is a GitHub Enterprise instance.
+export GH_HOST=github.com
+
 BASE="2.4.x"
 DRAFTS=0
 READY_ONLY=0
@@ -355,6 +360,18 @@ for pr in "$@"; do
         exit 1
     fi
 done
+
+for tool in gh jq; do
+    if ! type -P "$tool" >/dev/null; then
+        echo "${RED}Error: $tool is required but not found on PATH.${RESET}" >&2
+        exit 1
+    fi
+done
+
+if ! gh auth status --hostname github.com >/dev/null 2>&1; then
+    echo "${RED}Error: not logged in to github.com; run \"gh auth login\" first.${RESET}" >&2
+    exit 1
+fi
 
 if [ $# -eq 0 ]; then
     list_prs
