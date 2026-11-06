@@ -142,22 +142,63 @@ pr_record() {
                    author_committer: $author_committer,
                    approvers: ($ARGS.positional | map(select(startswith("A:")) | .[2:])),
                    changes_requested: ($ARGS.positional | map(select(startswith("C:")) | .[2:])),
-                   conflicts: (.mergeable == "CONFLICTING"),
+                   conflicts: (.merge == "CONFLICTING"),
+                   rebaseable: (if .merge == "MERGEABLE" then true
+                                elif .merge == "UNKNOWN" then null else false end),
+                   merge: (.merge | ascii_downcase | sub("_"; "-")
+                           | if . == "mergeable" then "clean"
+                             elif . == "conflicting" then "conflict" else . end),
                    ci: $ci, votes: $votes, ready: ($votes >= $needed)}' \
           ${T_APPROVERS[@]+"${T_APPROVERS[@]/#/A:}"} \
           ${T_CHANGES[@]+"${T_CHANGES[@]/#/C:}"} <<<"$1"
 }
 
-# mergeable <pr-json>: print MERGEABLE, CONFLICTING or UNKNOWN.  GitHub
-# computes mergeability lazily, so "gh pr list" often reports UNKNOWN;
-# a direct query of the PR usually resolves it.
-mergeable() {
-    local m number
+# rebase_map <graphql-filter-args...>: print a JSON object mapping PR
+# number to canBeRebased for open PRs matching the filter.  "gh pr
+# list" cannot report this, so query GraphQL directly.
+rebase_map() {
+    gh api graphql --paginate -F owner="${REPO%/*}" -F name="${REPO#*/}" "$@" \
+       -f query='query($owner: String!, $name: String!, $base: String, $endCursor: String) {
+          repository(owner: $owner, name: $name) {
+            pullRequests(states: OPEN, baseRefName: $base, first: 100, after: $endCursor) {
+              nodes { number canBeRebased }
+              pageInfo { hasNextPage endCursor }
+            }
+          }
+        }' \
+       --jq '.data.repository.pullRequests.nodes
+             | map({key: (.number | tostring), value: .canBeRebased}) | from_entries' \
+        | jq -s 'add // {}'
+}
+
+# merge_status <pr-json>: print the PR's merge status:
+#   CONFLICTING  the PR conflicts with the base branch
+#   NO_REBASE    the PR merges cleanly, so can be squash-merged, but
+#                rebase-merging conflicts, e.g. because conflicts were
+#                resolved by merging the base branch into the PR
+#   MERGEABLE    the PR merges cleanly and can be rebased
+#   UNKNOWN      GitHub has not computed mergeability
+# GitHub computes mergeability lazily, so "gh pr list" often reports
+# UNKNOWN; a direct query of the PR usually resolves it.
+merge_status() {
+    local m rb number
     m=$(jq -r '.mergeable // "UNKNOWN"' <<<"$1")
+    number=$(jq -r .number <<<"$1")
     if [ "$m" = UNKNOWN ]; then
-        number=$(jq -r .number <<<"$1")
         m=$(gh pr view "$number" -R "$REPO" --json mergeable --jq .mergeable \
                 2>/dev/null || echo UNKNOWN)
+    fi
+    if [ "$m" = MERGEABLE ]; then
+        rb=$(jq -r '.canBeRebased // empty' <<<"$1")
+        if [ -z "$rb" ]; then
+            rb=$(gh api graphql -F owner="${REPO%/*}" -F name="${REPO#*/}" \
+                    -F number="$number" \
+                    -f query='query($owner: String!, $name: String!, $number: Int!) {
+                       repository(owner: $owner, name: $name) {
+                         pullRequest(number: $number) { canBeRebased } } }' \
+                    --jq .data.repository.pullRequest.canBeRebased 2>/dev/null || true)
+        fi
+        [ "$rb" != false ] || m=NO_REBASE
     fi
     echo "$m"
 }
@@ -165,6 +206,7 @@ mergeable() {
 merge_label() {
     case "$1" in
         CONFLICTING) echo conflict ;;
+        NO_REBASE)   echo no-rebase ;;
         MERGEABLE)   echo clean ;;
         *)           echo unknown ;;
     esac
@@ -173,6 +215,7 @@ merge_label() {
 merge_colour() {
     case "$1" in
         CONFLICTING) echo "$RED" ;;
+        NO_REBASE)   echo "$YELLOW" ;;
         MERGEABLE)   echo "$GREEN" ;;
         *)           echo "$DIM" ;;
     esac
@@ -198,6 +241,8 @@ list_prs() {
 
     prs=$(gh pr list -R "$REPO" --base "$BASE" --state open --limit 500 \
              --json "$PR_FIELDS")
+    prs=$(jq --argjson rb "$(rebase_map -F base="$BASE")" \
+             'map(.canBeRebased = $rb[.number | tostring])' <<<"$prs")
 
     while IFS= read -r json; do
         number=$(jq -r .number <<<"$json")
@@ -208,10 +253,10 @@ list_prs() {
         [ "$draft" = false ] || [ "$DRAFTS" -eq 1 ] || continue
 
         tally "$json"
-        json=$(jq -c --arg m "$(mergeable "$json")" '.mergeable = $m' <<<"$json")
+        json=$(jq -c --arg m "$(merge_status "$json")" '.merge = $m' <<<"$json")
         [ "$READY_ONLY" -eq 0 ] || [ "$T_VOTES" -ge "$VOTES_NEEDED" ] || continue
         [ "$SKIP_CONFLICTS" -eq 0 ] \
-            || [ "$(jq -r .mergeable <<<"$json")" != CONFLICTING ] || continue
+            || [ "$(jq -r .merge <<<"$json")" != CONFLICTING ] || continue
         [ "$CI_ONLY" -eq 0 ] || [ "$T_CI" = pass ] || continue
 
         if [ "$JSON" -eq 1 ]; then
@@ -225,9 +270,9 @@ list_prs() {
         [ ${#T_CHANGES[@]} -eq 0 ] || cr=" ${RED}[changes requested]${RESET}"
         flag=""
         [ "$draft" = false ] || flag=" ${DIM}[draft]${RESET}"
-        merge=$(jq -r .mergeable <<<"$json")
+        merge=$(jq -r .merge <<<"$json")
 
-        line=$(printf '%s%5s%s  %s%d/%d %s%s  A%s R:%d %sCI:%-7s%s  %s%-8s%s  %-14s %s%s%s' \
+        line=$(printf '%s%5s%s  %s%d/%d %s%s  A%s R:%d %sCI:%-7s%s  %s%-9s%s  %-14s %s%s%s' \
             "$BOLD" "#$number" "$RESET" \
             "$(votes_colour "$T_VOTES")" "$T_VOTES" "$VOTES_NEEDED" "$ready" "$RESET" \
             "$([ "$T_AUTHOR" -eq 1 ] && echo + || echo -)" "${#T_APPROVERS[@]}" \
@@ -254,8 +299,9 @@ list_prs() {
     fi
 
     echo "${BOLD}Open PRs against ${CYAN}$BASE${RESET}${BOLD} in $REPO${RESET}" \
-         "${DIM}(A: author is committer, R: committer approvals)${RESET}"
-    echo "${DIM}   PR  Votes      A  R   CI          Merge     Author         Title${RESET}"
+         "${DIM}(A: author is committer, R: committer approvals;" \
+         "no-rebase: squash-merge only)${RESET}"
+    echo "${DIM}   PR  Votes      A  R   CI          Merge      Author         Title${RESET}"
     printf '%s\n' "${lines[@]}" | sort -t $'\t' -k1,1nr -k2,2n | cut -f3-
 }
 
@@ -269,7 +315,7 @@ show_pr() {
     base=$(jq -r .baseRefName <<<"$json")
 
     tally "$json"
-    json=$(jq -c --arg m "$(mergeable "$json")" '.mergeable = $m' <<<"$json")
+    json=$(jq -c --arg m "$(merge_status "$json")" '.merge = $m' <<<"$json")
 
     if [ "$JSON" -eq 1 ]; then
         pr_record "$json"
@@ -332,9 +378,14 @@ show_pr() {
          [ ${#T_CHANGES[@]} -eq 0 ] || echo " ${RED}(changes requested)${RESET}")"
 
     local merge
-    merge=$(jq -r .mergeable <<<"$json")
+    merge=$(jq -r .merge <<<"$json")
+    # GitHub does not compute mergeability for merged or closed PRs.
+    [ "$(jq -r .state <<<"$json")" = OPEN ] || merge=CLOSED
     case "$merge" in
+        CLOSED)      ;;
         CONFLICTING) echo "  ${BOLD}Merge:${RESET} ${RED}conflicts with $base${RESET}" ;;
+        NO_REBASE)   echo "  ${BOLD}Merge:${RESET} ${YELLOW}clean for squash-merge;" \
+                          "rebase-merge conflicts with $base${RESET}" ;;
         MERGEABLE)   echo "  ${BOLD}Merge:${RESET} ${GREEN}clean${RESET}" ;;
         *)           echo "  ${BOLD}Merge:${RESET} ${DIM}unknown${RESET}" ;;
     esac
