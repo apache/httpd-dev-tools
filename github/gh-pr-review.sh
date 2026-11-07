@@ -29,7 +29,7 @@ export GH_HOST=github.com
 
 BASE="2.4.x"
 DRAFTS=0
-READY_ONLY=0
+MIN_VOTES=0
 SKIP_CONFLICTS=0
 CI_ONLY=0
 JSON=0
@@ -60,9 +60,10 @@ link() {
 }
 
 usage() {
-    echo "Usage: $0 [-b branch] [-a] [-d] [-u] [-c] [-j] [PR-number...]" >&2
+    echo "Usage: $0 [-b branch] [-a] [-m votes] [-d] [-u] [-c] [-j] [PR-number...]" >&2
     echo "  -b branch   base branch to list PRs for (default $BASE)" >&2
     echo "  -a          only list approved PRs (enough votes to merge)" >&2
+    echo "  -m votes    only list PRs with at least this many votes" >&2
     echo "  -d          include draft PRs" >&2
     echo "  -u          ignore PRs with merge conflicts" >&2
     echo "  -c          only list PRs where CI passes" >&2
@@ -254,7 +255,7 @@ list_prs() {
 
         tally "$json"
         json=$(jq -c --arg m "$(merge_status "$json")" '.merge = $m' <<<"$json")
-        [ "$READY_ONLY" -eq 0 ] || [ "$T_VOTES" -ge "$VOTES_NEEDED" ] || continue
+        [ "$T_VOTES" -ge "$MIN_VOTES" ] || continue
         [ "$SKIP_CONFLICTS" -eq 0 ] \
             || [ "$(jq -r .merge <<<"$json")" != CONFLICTING ] || continue
         [ "$CI_ONLY" -eq 0 ] || [ "$T_CI" = pass ] || continue
@@ -272,7 +273,7 @@ list_prs() {
         [ "$draft" = false ] || flag=" ${DIM}[draft]${RESET}"
         merge=$(jq -r .merge <<<"$json")
 
-        line=$(printf '%s%5s%s  %s%d/%d %s%s  A%s R:%d %sCI:%-7s%s  %s%-9s%s  %-14s %s%s%s' \
+        line=$(printf '%s%5s%s  %s%d/%d %s%s  A%s R:%d  %s%-7s%s  %s%-9s%s  %-14s %s%s%s' \
             "$BOLD" "#$number" "$RESET" \
             "$(votes_colour "$T_VOTES")" "$T_VOTES" "$VOTES_NEEDED" "$ready" "$RESET" \
             "$([ "$T_AUTHOR" -eq 1 ] && echo + || echo -)" "${#T_APPROVERS[@]}" \
@@ -290,8 +291,8 @@ list_prs() {
     fi
 
     if [ ${#lines[@]} -eq 0 ]; then
-        if [ "$READY_ONLY" -eq 1 ]; then
-            echo "No open PRs against $BASE with $VOTES_NEEDED votes."
+        if [ "$MIN_VOTES" -gt 0 ]; then
+            echo "No open PRs against $BASE with at least $MIN_VOTES votes."
         else
             echo "No open PRs against $BASE."
         fi
@@ -301,7 +302,7 @@ list_prs() {
     echo "${BOLD}Open PRs against ${CYAN}$BASE${RESET}${BOLD} in $REPO${RESET}" \
          "${DIM}(A: author is committer, R: committer approvals;" \
          "no-rebase: squash-merge only)${RESET}"
-    echo "${DIM}   PR  Votes      A  R   CI          Merge      Author         Title${RESET}"
+    echo "${DIM}   PR  Votes      A  R    CI       Merge      Author         Title${RESET}"
     printf '%s\n' "${lines[@]}" | sort -t $'\t' -k1,1nr -k2,2n | cut -f3-
 }
 
@@ -392,11 +393,16 @@ show_pr() {
     echo
 }
 
-while getopts "haducjb:" opt; do
+while getopts "haducjb:m:" opt; do
     case "$opt" in
         c) CI_ONLY=1 ;;
         u) SKIP_CONFLICTS=1 ;;
-        a) READY_ONLY=1 ;;
+        a) MIN_VOTES=$VOTES_NEEDED ;;
+        m) if ! [[ "$OPTARG" =~ ^[0-9]+$ ]]; then
+               echo "${RED}Error: -m needs a number of votes: $OPTARG${RESET}" >&2
+               exit 1
+           fi
+           MIN_VOTES=$OPTARG ;;
         d) DRAFTS=1 ;;
         j) JSON=1 ;;
         b) BASE="$OPTARG" ;;

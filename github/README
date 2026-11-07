@@ -28,10 +28,10 @@ These scripts require the following tools (details in the script headers):
   This script lists open PRs against 2.4.x (or another branch with -b) and
   tallies backport votes: author is a committer, each committer approval,
   and CI passing each count as one; three are needed.  Also flags merge
-  conflicts.  -a shows only approved PRs (enough votes), -d includes
-  drafts, -u hides PRs with merge conflicts, -c shows only PRs passing
-  CI, -j gives JSON output, and giving PR numbers shows a detailed
-  breakdown.
+  conflicts.  -a shows only approved PRs (enough votes), -m N shows
+  only PRs with at least N votes, -d includes drafts, -u hides PRs
+  with merge conflicts, -c shows only PRs passing CI, -j gives JSON
+  output, and giving PR numbers shows a detailed breakdown.
 
 More details can be found at the top of the scripts.
 
