@@ -52,12 +52,19 @@ scm_svn_assure_signing_key() {
   :
 }
 
+# Modified files are fatal: the candidate is copied from SVN_SRC@SVN_REV on
+# the server, so local changes would be silently left out. Unversioned
+# files cannot reach the candidate; they are fatal unless -u (ALLOW_UNTRACKED=1)
+# downgrades them to a warning.
 scm_svn_assure_clean_checkout() {
-  out=`svn stat`
-  test -z "$out" || fail "local checkout is not clean:
+  out=`svn stat | grep -v '^?' || true`
+  test -z "$out" || fail "local checkout has modified files:
 $out
-Unversioned files ('?'): remove them by hand (svn stat | grep '^?').
-Modified files: 'svn revert -R .' drops all local changes."
+'svn revert -R .' drops all local changes."
+  out=`svn stat | grep '^?' || true`
+  test -z "$out" || untracked_files_found "local checkout has unversioned files (not part of the candidate):
+$out
+Remove them by hand, or rerun with -u to ignore them."
 }
 
 # the repository path of a candidate/release, relative to SVN_BASE

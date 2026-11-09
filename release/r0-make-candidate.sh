@@ -32,15 +32,19 @@ usage: $0 [options] rcN|version
   Options:
     -h             print usage information
     -y             never ask, always assume yes
+    -u             allow untracked (unversioned) files in the checkout; they
+                   are not part of the candidate, but normally stop the run
 EOF
   exit 1
 }
 
-while getopts "hy" opt; do
+while getopts "hyu" opt; do
     case $opt in
         h)  usage
             ;;
         y)  ALWAYS_YES=1
+            ;;
+        u)  ALLOW_UNTRACKED=1
             ;;
     esac
 done

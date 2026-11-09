@@ -15,23 +15,54 @@
 1. Wherever you can best run the test suite(s), make sure it's passing on a clean tree
 2. Make sure changes-entries/ is empty (apart from template.txt) and docs xforms have been built and committed
 3. If there is security content:
-   - Use `cveprocess_update.py --release` on all CVE's to make sure there are no stale version
-     references. We often fill in the affected/fixed ranges when the CVE is accepted, but
-     they may not make the next release.  Checkin the changes and cveprocess_put.py them
-   - make sure the SECURITY repo tools/readiness.sh output agrees with what you think is ready.
-   - Check open PR's on github to see if anyone had submitted patches for vulnerabilities
-     being fixed, so you can `closes #xxx` to dispose/credit them.
-   - After this, the security content is public but un-announced and the clock is ticking.
-   - apply to trunk and note the revision in a scratchpad.
-     The scratchpad should look something like this to be used by some security tools later for bulk 
-     updates (e.g. update_svn_logs_with_cve.py)
+
+   - Make sure the SECURITY repo `tools/readiness.sh` output agrees with what you think is ready.
+   - Use `tools/readiness.sh --ready -v 2.4.k` to make sure all the ready CVE's have a range up to 2.4.k-1.
+     For example, if you are preparing 2.4.71, `tools/readiness.sh --ready -v 2.4.k` ensures that the ready
+     CVE's have an affected range "lessThanOrEqual 2.4.70".
+
+     If any are wrong, readiness.sh spits out the necessary `cveprocess_update.py` invocation.
+
+   - For each uncommitted ready CVE:
+     - create a branch off of trunk
+     - apply the patch
+     - commit and create a PR
+
+       Let CI run, continue with additional changes.
+
+   - The security content is public but un-announced and the clock is ticking.
+
+   - Watch the recent CI runs, e.g.
+
+     `while true; do gh run list -R apache/httpd  -e pull_request --created ">=$(gdate -d '2 hours ago' -Iseconds)" && sleep 30; done`
+
+     Re-run failing tests if they look racy/intermittent.
+
+   - For each fix, merge the PR's when clean
+
+     Note the commit hash of the merge commit in a scratchpad:
 
      CVE-XXXX-yyyy-foo-bar
-         trunk: 1912345
-         2.4.x: 1912346
+         trunk: ab135...
+         2.4.x: 
 
-   - apply to 2.4.x and note the revision in a scratchpad.
+   - For each fix, apply the change to 2.4.x 
+
+     1. If there is no 2.4.x-specific patch, do one of:
+        - use the backport skill in $DEV_TOOLS.
+        - If simple, `git cherry-pick -x` the trunk commit to 2.4.x in a new PR and merge it.
+
+        Otheriwse, apply the 2.4.x-specific patch.
+
+     2. Create a PR and watch the CI runs again.
+
+        `while true; do gh run list -R apache/httpd  -e pull_request --created ">=$(gdate -d '2 hours ago' -Iseconds)" && sleep 30; done`
+
+     3. Merge it and record the hash of the merge commit in the scratchpad
+
 4. Make sure the test suite(s) still passes (or wait/watch CI runs)
+
+4. `make update-changes` on a temp branch and add/commit/merge
 
 ## Procedure
 
@@ -41,8 +72,9 @@
 
    Make sure it's up to date and has no local changes.
 
-   It's best to have a dedicated checkout used for releases, as the tools expect it to be clean
-   (no unversioned files).
+   It's best to have a dedicated checkout used for releases. The tools refuse to run
+   with modified or unversioned files; `r0-make-candidate.sh -u` accepts unversioned
+   files, which are never part of the candidate.
 
    For example `cd ~/asf/httpd-2.4.x-release`
 
@@ -61,6 +93,9 @@
    pushed: https://github.com/apache/httpd/actions. In git mode the script
    prints the matching `gh run list` / `gh run watch` commands.
 
+   `$DEV_TOOLS/github/watch_candidate.sh` watches the last candidate tag CI run.
+
+
 4. Prepare the tarballs: 
 
    ```
@@ -68,6 +103,9 @@
    ```
 
    Pay attention as you will likely be prompted for gpg login.
+
+   If you create the tars while CI was still running on the candidate branch, go back and check
+   on the progress.
 
 5. Push tarballs for voting: 
 

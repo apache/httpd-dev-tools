@@ -138,13 +138,22 @@ ${hint}"
   fi
 }
 
-# /dist is not in httpd's .gitignore; ignore it here like svn:ignore does
+# /dist is not in httpd's .gitignore; ignore it here like svn:ignore does.
+# Modified tracked files are fatal: they are not in SRC_REV and would be
+# silently left out of the candidate. Untracked files cannot reach the
+# candidate (it is pushed from a commit, edited in a fresh clone and
+# exported with git archive), so they are fatal only as a hint that this is
+# not a dedicated release checkout; -u (ALLOW_UNTRACKED=1) downgrades them
+# to a warning.
 scm_git_assure_clean_checkout() {
-  out=`git status --porcelain -- . ":(exclude)${DIST_DIR}"`
-  test -z "$out" || fail "local checkout is not clean:
+  out=`git status --porcelain --untracked-files=no -- . ":(exclude)${DIST_DIR}"`
+  test -z "$out" || fail "local checkout has modified files:
 $out
-Untracked files ('??'): preview with 'git clean -fdn', remove with 'git clean -fd'.
-Modified files: 'git stash' to keep them, 'git checkout -- <file>' to drop them."
+'git stash' to keep them, 'git checkout -- <file>' to drop them."
+  out=`git status --porcelain --untracked-files=all -- . ":(exclude)${DIST_DIR}" | grep '^??' || true`
+  test -z "$out" || untracked_files_found "local checkout has untracked files (not part of the candidate):
+$out
+Preview removal with 'git clean -fdn', remove with 'git clean -fd', or rerun with -u to ignore them."
 }
 
 # When GIT_SIGN_TAGS=1, make sure 'git tag -s' works here before anything

@@ -149,6 +149,15 @@ assure_release_branch() {
   fail "checkout is on '${SRC_BRANCH}', releases are only cut from: ${RELEASE_BRANCHES} (RELEASE_BRANCHES in env.sh)"
 }
 
+# untracked_files_found MSG   fatal unless ALLOW_UNTRACKED=1 (r0 -u)
+untracked_files_found() {
+  if test "${ALLOW_UNTRACKED}" = 1; then
+    warn "$1"
+  else
+    fail "$1"
+  fi
+}
+
 assure_clean_checkout() {
   scm_assure_clean_checkout
 }
