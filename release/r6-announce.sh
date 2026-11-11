@@ -194,14 +194,30 @@ EOF
 done
 
 
-CVES_MENTIONED=`fgrep CVE- "${AO_DIST_RELEASE_PATH}/CHANGES_${VERSION}" || true`
-if test -n "${CVES_MENTIONED}"; then
-  CVE_COUNT=`echo "${CVES_MENTIONED}" | grep -oE 'CVE-[0-9]+-[0-9]+' | sort -u | wc -l | tr -d ' '`
+# Only count CVE IDs from the entry header lines ("*) SECURITY: CVE-...").
+# CVE IDs that merely appear inside a description (e.g. "after CVE-xxxx")
+# are not CVEs fixed in this release.
+CHANGES_FILE="${AO_DIST_RELEASE_PATH}/CHANGES_${VERSION}"
+CVE_HEADERS=`grep -E '^ *\*\) *SECURITY: *CVE-[0-9]+-[0-9]+' "${CHANGES_FILE}" || true`
+if test -n "${CVE_HEADERS}"; then
+  CVE_IDS=`echo "${CVE_HEADERS}" | sed -E 's/^ *\*\) *SECURITY: *(CVE-[0-9]+-[0-9]+).*/\1/' | sort -u`
+  CVE_COUNT=`echo "${CVE_IDS}" | wc -l | tr -d ' '`
   cat << EOF
 Then set the following CVEs mentioned to READY on the ASF cveprocess site (and send the emails from the OSS/ASF tab):
-${CVES_MENTIONED}
+${CVE_HEADERS}
+
+CVE IDs:
+${CVE_IDS}
 Total CVEs: ${CVE_COUNT}
 EOF
+  # Any other CVE IDs in the file are only referenced, not fixed here.
+  CVE_OTHER=`grep -oE 'CVE-[0-9]+-[0-9]+' "${CHANGES_FILE}" | sort -u | grep -vxF -f <(echo "${CVE_IDS}") || true`
+  if test -n "${CVE_OTHER}"; then
+    cat << EOF
+(Ignored: referenced in descriptions only, not fixed in this release:
+${CVE_OTHER})
+EOF
+  fi
 else
   echo "There seem to be no CVEs mentioned in the CHANGES_${VERSION} file."
 fi

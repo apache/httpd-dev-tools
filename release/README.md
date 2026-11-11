@@ -105,7 +105,7 @@
    Pay attention as you will likely be prompted for gpg login.
 
    If you create the tars while CI was still running on the candidate branch, go back and check
-   on the progress.
+   on the progress before proceeding.
 
 5. Push tarballs for voting: 
 
@@ -138,12 +138,19 @@
       are never published without the CVE information.
 
 2. Wait for files to be available
-   - Validate <https://downloads.apache.org/httpd/> (within 15 minutes)
-   - Validate <https://dlcdn.apache.org/httpd/>
+
+   Things can be cached for up to 30 minutes.
+
+   Note: You should curl/wget any link you test with a dummy query to avoid the 
+   risk of triggering a 404 that itself will then get cached. This can happen even
+   when the directory listing is updated.
+
+   - Validate https://downloads.apache.org/httpd/ 
+   - Validate https://dlcdn.apache.org/httpd/
 
      The directory listing can be cached for up to two hours, but validate that you
      can manually access the current release by manipulating the filenames you see from
-     the previous release then move on (within 15 more minutes?)
+     the previous release then move on (within 30 more minutes?)
 
 3. Stage the other release artifacts:
 
@@ -158,12 +165,10 @@
           tools/update_cvejson_with_revisions.py httpd-2.4.NN.txt
           # Runs a series of tools/cveprocess_update.py CVE-xxxx/CVE.json --backport r1xxxx
           svn ci
-          tools/update_cvejson_with_revisions.py --put httpd-2.4.NN.txt
           # runs a series of tools/cveprocess_put.py CVE-xxxx/CVE.json
       ```
 
-      Compare the output/totals of tools/readiness.sh with tools/readiness.sh -B (should result in
-      the same total).
+      Do one last check of `tools/readiness.sh --ready -B`
 
       IMPORTANT: update The SVN checkout in the httpd-2.4.x-release dir you are running the release
       scripts from (dist/pmc)
@@ -247,28 +252,11 @@
      - ASF Security will be notified and will submit to the CVE
        project and then set state to 'PUBLIC'.
 
-   2. `tools/update_svn_logs_with_cve.py` generates a shell script that updates
-       the 2.4.x SVN commits to includ the CVE names. 
-
-       The input is a text file with stanzas like this which is just the way Eric
-       tracks them locally (we could get it from CVE.json these days)
-
-       ```
-       CVE-2026-33857-oob_reads_in_ajp_get_functions
-            trunk: 1933340
-            2.4.x: 1933341
-       ```
-
-       This can be done manually with  `svn propedit --revprop -r... svn:log`
-
-       IMPORTANT: You need to save and run the output of `tools/update_svn_logs_with_cve.py`
-       it doesn't run the SVN commands directly.
-
 9. Clean up prior release artifacts
-   
-   This does not always need action.
 
-     - https://dist.apache.org/repos/dist/release/httpd (incl CHANGES_2.4.xx)
+   This has not needed action in recent releases
+
+   Check https://dist.apache.org/repos/dist/release/httpd (incl CHANGES_2.4.xx)
 
 10. Review the CHANGES and https://httpd.apache.org/security/vulnerabilities_24.html 
 
