@@ -140,6 +140,13 @@ it modifies) before committing; the `APLOGNO()` numbers in the code are allocate
 and are backported unchanged. This alone does not count as a change to the commit: no
 prefix is needed for it, though the pick must then be amended to commit without it.
 
+**Always remove `[skip ci]`** from the trunk message, wherever it appears (the subject or
+a line of its own), and drop a line left empty by it. A trunk commit marked `[skip ci]`
+did not need CI on trunk; its backport does, and 2.4.x PRs are squash-merged, so a
+`[skip ci]` in any commit on the branch skips CI for the merge itself. This alone does
+not count as a change to the commit either: no prefix. Quote the message without it in
+the PR body too.
+
 Conflicts:
 
 - Resolve against the 2.4.x code, which differs in APIs, MMN and surrounding context. Read
