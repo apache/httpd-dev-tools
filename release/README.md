@@ -269,17 +269,19 @@
      critical to verify the expected CVEs are listed. This is built by CI during
      changes to git@github.com:/apache/httpd-site and can be broken if the
      exported CVE json is missing fields.
-     
+
      If CHANGES is really bad, consider replacing the various CHANGES files on dist/httpd
      (which is dist/apache.org-dist from your working directory checkout for release scripts)
 
 11. Moderate announcements
-    If you are a moderator for announce@httpd.a.o or announce@a.o moderate your own announcement at https://webmod.apache.org/?action=frontpage
-    
-12. Add the release to bugzilla: 
-    
+    If you are a moderator for announce@httpd.a.o or announce@a.o moderate your own announcement and the
+    cveprocess emails at https://webmod.apache.org/?action=frontpage
+
+12. Add the release to bugzilla:
+
     <https://bz.apache.org/bugzilla/editversions.cgi?action=add&product=Apache%20httpd-2>
 13. Commit any tests for CVEs that were resolved in the release.
+14. Cleanup STATUS in the security repo for what shipped.
 
 
 ## Misc notes
