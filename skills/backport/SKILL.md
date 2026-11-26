@@ -1,11 +1,11 @@
 ---
 name: backport
-description: Propose a backport of trunk revisions to 2.4.x - cherry-pick each rev into its own commit on a new branch and worktree off origin/2.4.x, build it, and open a "[2.4.x] Merge ..." PR after previewing the text. Use for "backport r1234567 to 2.4.x", "propose a backport of <hash>", "/backport mod_ssl r1934975 r1934980".
+description: Propose a backport of trunk revisions to 2.4.x - cherry-pick each rev into its own commit on a new branch and worktree off the apache/httpd 2.4.x branch, build it, and open a "[2.4.x] Merge ..." PR after previewing the text. Use for "backport r1234567 to 2.4.x", "propose a backport of <hash>", "/backport mod_ssl r1934975 r1934980".
 ---
 
 # Propose a trunk → 2.4.x backport
 
-Given one or more trunk revisions, build a `2.4.x-<topic>` branch off `origin/2.4.x` with
+Given one or more trunk revisions, build a `2.4.x-<topic>` branch off `$UP/2.4.x` with
 **one commit per trunk revision**, build it, and open a PR against `2.4.x` whose body
 quotes the trunk commit messages. The repository is now read/write Git: the PR is the
 backport proposal, and no `STATUS` entry is needed.
@@ -20,7 +20,15 @@ if it is not given, pick one from the files touched and say so.
 - If the checkout has an `AGENTS.md`, read it first and follow it. Local guidance there
   (paths, build setup, commit and PR conventions) takes precedence over the defaults in
   this skill.
-- `git fetch origin`. Base on **`origin/2.4.x`**; local `trunk`/`2.4.x` may be stale.
+- Find the apache/httpd remote, `$UP`: `upstream` when the checkout has both an `origin`
+  and an `upstream` remote (the usual triangle: `origin` is the user's fork), else
+  `origin`. Check that it really points at apache/httpd:
+  ```
+  if git remote | grep -qx upstream && git remote | grep -qx origin; then UP=upstream; else UP=origin; fi
+  git remote get-url $UP | grep -q '[:/]apache/httpd\(\.git\)\?$' || echo "$UP is not apache/httpd"
+  ```
+  If it isn't, ask the user which remote is apache/httpd. Below, `$UP` is that remote.
+- `git fetch $UP`. Base on **`$UP/2.4.x`**; local `trunk`/`2.4.x` may be stale.
 - Stay inside this checkout. The only outside paths touched are the read-only APR source
   trees buildconf needs.
 - Find the user's GitHub fork: their login, and the remote that pushes to
@@ -30,7 +38,7 @@ if it is not given, pick one from the files touched and say so.
   git remote -v | grep "[:/]$FORK_OWNER/httpd\(\.git\)\? (push)"
   ```
   The first column is `<fork-remote>`, used in step 5. If no remote matches, ask the user
-  which remote is their fork; never fall back to `origin`.
+  which remote is their fork; never fall back to `$UP`.
 
 ## 1. Identify the trunk commits
 
@@ -38,7 +46,7 @@ Record the git hash for every commit, and its svn revision where it has one.
 
 - Rev → hash (the trailing space stops r123 matching r1234):
   ```
-  git log origin/trunk --format='%H %s' --grep='trunk@1234567 '
+  git log $UP/trunk --format='%H %s' --grep='trunk@1234567 '
   ```
   It must resolve to exactly one commit.
 - Hash → rev:
@@ -47,12 +55,12 @@ Record the git hash for every commit, and its svn revision where it has one.
   ```
   No output means a post-svn commit: it has no revision, and is named by its hash (the
   first 10 characters) wherever this skill says `r<x>`.
-- Confirm each is on trunk: `git merge-base --is-ancestor <hash> origin/trunk`.
+- Confirm each is on trunk: `git merge-base --is-ancestor <hash> $UP/trunk`.
 - Order them oldest first (trunk order), whatever order they were given in.
 
 Check whether any is already in 2.4.x. A backport is a fresh commit, so `git cherry` and
-`git branch --contains` say nothing; grep the `origin/2.4.x` log for the rev and the hash
-(`git log origin/2.4.x --grep='r1234567' --grep='<hash>'`; `cherry-pick -x` records the
+`git branch --contains` say nothing; grep the `$UP/2.4.x` log for the rev and the hash
+(`git log $UP/2.4.x --grep='r1234567' --grep='<hash>'`; `cherry-pick -x` records the
 hash) and compare the code itself.
 
 Check too whether each rev's **test changes** are already on 2.4.x. `test/` is kept
@@ -62,7 +70,7 @@ code it tests, carrying a `not_backported`/`skip_not_backported` mark naming the
 each rev touching `test/`, find the marks naming it:
 
 ```
-git grep -n -e 'not_backported' origin/2.4.x -- test | grep '<rev>'
+git grep -n -e 'not_backported' $UP/2.4.x -- test | grep '<rev>'
 ```
 
 A mark may name a range (`"r1937596-r1937647"`); check by eye whether a rev falls inside
@@ -70,7 +78,7 @@ one. Then compare the files the rev touches between the branches:
 
 ```
 files=$(git diff-tree --no-commit-id --name-only -r <hash> -- test)
-git diff --quiet origin/trunk origin/2.4.x -- $files && echo synced || echo 'not synced'
+git diff --quiet $UP/trunk $UP/2.4.x -- $files && echo synced || echo 'not synced'
 ```
 
 `synced` means 2.4.x has the rev's test changes (and any later trunk ones). On
@@ -91,7 +99,7 @@ state of each rev (`n/a`, `synced`, `not synced`) and the marks found:
 Branch `2.4.x-<topic>`; worktree under `.claude/worktrees/`:
 
 ```
-git worktree add -b 2.4.x-<topic> .claude/worktrees/<name> origin/2.4.x
+git worktree add -b 2.4.x-<topic> .claude/worktrees/<name> $UP/2.4.x
 ```
 
 In the worktree (a fresh worktree has no `config.nice`):
@@ -181,7 +189,7 @@ lack the change. Instead each one gets the release the backport will first appea
 suffix dropped:
 
 ```
-git show origin/2.4.x:include/ap_release.h \
+git show $UP/2.4.x:include/ap_release.h \
   | grep -E '#define AP_SERVER_(MAJOR|MINOR|PATCH)VERSION_NUMBER'
 ```
 
@@ -209,7 +217,7 @@ the repo's ChangeLog style with the `Co-Authored-By` trailer:
 ```
 
 - Commit it on the backport branch, after the picks.
-- Cherry-pick the same commit onto a branch `trunk-<topic>-bp` off `origin/trunk`, in a
+- Cherry-pick the same commit onto a branch `trunk-<topic>-bp` off `$UP/trunk`, in a
   second worktree under `.claude/worktrees/`. It must apply cleanly there. If trunk's copy
   of the file has moved on, stop and report instead of resolving it.
 - Check that `git diff <backport branch> trunk-<topic>-bp -- <the edited files>` is
@@ -235,7 +243,7 @@ XPASS or skip; a failure means the backport is incomplete, so report it and stop
 ## 5. Push, preview the PR, then create it
 
 Push to the user's fork (`<fork-remote>` from step 0) with an **explicit refspec** (a
-bare push resolves to the tracked branch). Never push to `origin`:
+bare push resolves to the tracked branch). Never push to `$UP`:
 
 ```
 git push <fork-remote> 2.4.x-<topic>:2.4.x-<topic>

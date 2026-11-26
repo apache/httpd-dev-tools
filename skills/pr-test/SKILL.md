@@ -17,8 +17,16 @@ Usage: `/pr-test 529`, or `/pr-test 529 owner/repo` to override the source repo.
 - If the checkout has an `AGENTS.md`, read it first and follow it. Local guidance there
   (paths, build setup, commit and PR conventions) takes precedence over the defaults in
   this skill.
-- The PR repo defaults to **`apache/httpd`**, which is what a bare `gh` resolves to here
-  (`origin` is upstream).
+- Find the apache/httpd remote, `$UP`: `upstream` when the checkout has both an `origin`
+  and an `upstream` remote (the usual triangle: `origin` is the user's fork), else
+  `origin`. Check that it really points at apache/httpd:
+  ```
+  if git remote | grep -qx upstream && git remote | grep -qx origin; then UP=upstream; else UP=origin; fi
+  git remote get-url $UP | grep -q '[:/]apache/httpd\(\.git\)\?$' || echo "$UP is not apache/httpd"
+  ```
+  If it isn't, ask the user which remote is apache/httpd. Below, `$UP` is that remote.
+- The PR repo defaults to **`apache/httpd`**; pass `--repo apache/httpd` to every `gh`
+  command (with a fork remote present, a bare `gh` may resolve to the fork).
 - Find the user's GitHub fork: their login, and the remote that pushes to
   `<login>/httpd`:
   ```
@@ -26,15 +34,15 @@ Usage: `/pr-test 529`, or `/pr-test 529 owner/repo` to override the source repo.
   git remote -v | grep "[:/]$FORK_OWNER/httpd\(\.git\)\? (push)"
   ```
   The first column is `<fork-remote>`, used in step 5. If no remote matches, ask the user
-  which remote is their fork; never fall back to `origin`.
+  which remote is their fork; never fall back to `$UP`.
 - Working tree must be clean. If it isn't, offer a worktree under `.claude/worktrees/prNNN`
   — the name must stay **≤ 7 characters**: the `test/modules/arch/linux` suite binds a
   unix socket under the worktree path, which has to fit the 108-byte `sockaddr_un` limit.
 - The tree must be configured and built: `Makefile` exists and `build/config_vars.mk` sets
   `PYTEST3`.
-- `git fetch origin`, then base everything on `origin/trunk`. Local `trunk` is stale; never
+- `git fetch $UP`, then base everything on `$UP/trunk`. Local `trunk` is stale; never
   branch off it, and never off another topic branch. If the PR targets `2.4.x`, base on
-  `origin/2.4.x`.
+  `$UP/2.4.x`.
 
 ## 1. Evaluate the change
 
@@ -60,7 +68,7 @@ Create no branch and write no test.
 ## 2. Branch and write the test
 
 ```
-git switch -c prNNN-testing origin/trunk
+git switch -c prNNN-testing $UP/trunk
 ```
 
 Pick the pyhttpd package from the files the PR touches:
@@ -190,10 +198,10 @@ A case added to an existing file gets the normal one-clause ChangeLog form. Neve
 
 ## 4. Apply the PR commit AS-IS and show it passes
 
-`origin` has no PR refspec, so fetch the head explicitly:
+`$UP` has no PR refspec, so fetch the head explicitly:
 
 ```
-git fetch origin refs/pull/NNN/head:refs/remotes/origin/pr/NNN
+git fetch $UP refs/pull/NNN/head:refs/remotes/$UP/pr/NNN
 git cherry-pick -x <sha>...
 ```
 
@@ -217,11 +225,11 @@ Push to the user's fork (`<fork-remote>` from step 0):
 git push <fork-remote> prNNN-testing:prNNN-testing
 ```
 
-**Use the explicit refspec.** The branch tracks `origin/trunk`, so with `push.default`
+**Use the explicit refspec.** The branch tracks `$UP/trunk`, so with `push.default`
 set to `upstream` (or `tracking`) a bare `git push <fork-remote> prNNN-testing` resolves
 to `trunk` on the fork.
 
-**Never push to `origin`** (apache/httpd). Report the branch URL.
+**Never push to `$UP`** (apache/httpd). Report the branch URL.
 
 Do not open a PR: its subject and body must be shown to the user and approved first.
 Offer to draft one.

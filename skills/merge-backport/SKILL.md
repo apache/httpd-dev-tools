@@ -18,7 +18,15 @@ work round a failed check (no `--admin`, no `--auto`, no waiting for CI to finis
 
 - If the checkout has an `AGENTS.md`, read it first and follow it. Local guidance there
   takes precedence over the defaults in this skill.
-- `git fetch origin`.
+- Find the apache/httpd remote, `$UP`: `upstream` when the checkout has both an `origin`
+  and an `upstream` remote (the usual triangle: `origin` is the user's fork), else
+  `origin`. Check that it really points at apache/httpd:
+  ```
+  if git remote | grep -qx upstream && git remote | grep -qx origin; then UP=upstream; else UP=origin; fi
+  git remote get-url $UP | grep -q '[:/]apache/httpd\(\.git\)\?$' || echo "$UP is not apache/httpd"
+  ```
+  If it isn't, ask the user which remote is apache/httpd. Below, `$UP` is that remote.
+- `git fetch $UP`.
 
 ## 1. Verify the PR
 
@@ -55,9 +63,9 @@ Green means there is **at least one** check and every check's `bucket` is `pass`
 ## 3. Collect the commits
 
 ```
-git fetch origin pull/N/head
+git fetch $UP pull/N/head
 git rev-parse FETCH_HEAD        # must equal HEAD_SHA; if not, start again from step 1
-git rev-list --reverse origin/2.4.x..$HEAD_SHA
+git rev-list --reverse $UP/2.4.x..$HEAD_SHA
 ```
 
 That list, oldest first, is the PR's commits. Its length must match the number of
@@ -133,7 +141,7 @@ message as trailers, and both are easily put off:
 - `Submitted by:` names, each once and comma-separated on one line, the git author of
   every commit:
   ```
-  git log --reverse --format='%an <%ae>' origin/2.4.x..$HEAD_SHA
+  git log --reverse --format='%an <%ae>' $UP/2.4.x..$HEAD_SHA
   ```
   together with everyone named in a `Submitted by:` line removed from the bodies. Go
   through the commits in order, taking each commit's git author and then the names
@@ -154,7 +162,7 @@ message as trailers, and both are easily put off:
   of first appearance, **one per line**. Never join them with commas: GitHub reads
   such a line as a single author with a garbled name.
   ```
-  git log --reverse --format=%B origin/2.4.x..$HEAD_SHA | grep -i '^co-authored-by:'
+  git log --reverse --format=%B $UP/2.4.x..$HEAD_SHA | grep -i '^co-authored-by:'
   ```
   Write the key as `Co-Authored-By:` whatever capitalisation the commit used. Leave
   out anyone already named in `Submitted by:`, and omit the lines if there are none.
@@ -215,8 +223,8 @@ without the flag. Don't pass `--delete-branch`: the branch is the contributor's.
 Afterwards:
 
 ```
-git fetch origin
-git log -1 --format='%H%n%B' origin/2.4.x
+git fetch $UP
+git log -1 --format='%H%n%B' $UP/2.4.x
 ```
 
 Report the new commit hash, and compare its message with the approved one: say so if
@@ -224,7 +232,7 @@ GitHub changed anything (it sometimes appends `Co-authored-by:` lines of its own
 
 ## Notes
 
-- The merge goes through `gh pr merge` only. Never push to `origin/2.4.x` directly,
+- The merge goes through `gh pr merge` only. Never push to `$UP/2.4.x` directly,
   and never do the squash locally.
 - One PR per invocation. For several PRs, run the whole sequence, preview included,
   for each.
